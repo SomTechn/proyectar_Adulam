@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<title>Proyección</title>
+<link rel="manifest" href="manifest.json">
+<style>
+html,body{margin:0;height:100%;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-tap-highlight-color:transparent;background:#020617}
+*{box-sizing:border-box}
+/* ===== Escenario de proyección (sin Tailwind para funcionar sin internet) ===== */
+.stg{position:absolute;inset:0;overflow:hidden;background:#000;color:#fff}
+.stg-bg{position:absolute;inset:0;background-size:cover;background-position:center}
+.stg-dim{position:absolute;inset:0;background:#000;opacity:0;transition:opacity .3s}
+.stg-layer{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .35s ease}
+.stg-box{display:flex;flex-direction:column;align-items:center;gap:.4em}
+.stg-t{white-space:pre-line;line-height:1.18;overflow-wrap:normal;word-break:normal}
+.stg-ref{opacity:.85;font-weight:600;letter-spacing:.02em}
+.stg-cuenta{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:0;transition:opacity .35s;font-variant-numeric:tabular-nums}
+.stg-logo{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .4s;pointer-events:none}
+.stg-logo img{max-width:60%;max-height:60%;object-fit:contain}
+.stg-msg{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;opacity:0;transition:opacity .3s,transform .3s;transform:translateY(100%)}
+.stg-msg div{background:rgba(220,38,38,.92);color:#fff;font-weight:700;text-align:center;width:100%}
+.stg-msg.on{opacity:1;transform:none}
+.stg-negro{position:absolute;inset:0;background:#000;opacity:0;transition:opacity .35s;pointer-events:none}
+/* ===== Pantalla completa ===== */
+#scr{position:fixed;inset:0;cursor:none;background:#000}
+.hint{position:fixed;left:50%;top:24px;transform:translateX(-50%);background:rgba(15,23,42,.85);color:#e2e8f0;padding:10px 16px;border-radius:12px;font-size:14px;transition:opacity .6s;z-index:5;cursor:default}
+.dot{position:fixed;top:10px;right:10px;width:10px;height:10px;border-radius:50%;z-index:6;transition:opacity .8s}
+.setup{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#020617;z-index:9;cursor:default}
+.setup .card{background:#0f172a;border:1px solid #1e293b;border-radius:16px;padding:24px;width:min(92vw,380px);color:#e2e8f0}
+.setup input{width:100%;padding:12px;border-radius:10px;border:1px solid #334155;background:#020617;color:#fff;font-size:20px;letter-spacing:.15em;text-align:center;margin:12px 0}
+.setup button{width:100%;padding:12px;border:0;border-radius:10px;background:#4f46e5;color:#fff;font-weight:700;font-size:16px}
+/* ===== Escenario (músicos / púlpito) ===== */
+#esc{position:fixed;inset:0;background:#000;color:#fff;display:flex;flex-direction:column;padding:2vh 3vw;gap:2vh;cursor:none}
+#esc .bar{display:flex;justify-content:space-between;align-items:center;font-variant-numeric:tabular-nums}
+#esc .reloj{font-size:7vh;font-weight:700}
+#esc .timer{font-size:7vh;font-weight:700;color:#fbbf24}
+#esc .badges span{display:inline-block;margin-right:1vw;padding:.4vh 1vw;border-radius:8px;font-size:2.4vh;font-weight:700}
+#esc .act{flex:1;min-height:0;position:relative;border:2px solid #16a34a;border-radius:14px}
+#esc .act .lab,#esc .sig .lab{position:absolute;top:1vh;left:1.2vw;font-size:2.2vh;color:#86efac;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+#esc .act .tx{position:absolute;inset:5vh 2vw 2vh;display:flex;align-items:center;justify-content:center;text-align:center;white-space:pre-line;line-height:1.15;font-weight:700}
+#esc .sig{height:24vh;position:relative;border:2px solid #334155;border-radius:14px;color:#94a3b8}
+#esc .sig .lab{color:#94a3b8}
+#esc .sig .tx{position:absolute;inset:5vh 2vw 1.5vh;display:flex;align-items:center;justify-content:center;text-align:center;white-space:pre-line;line-height:1.15;font-size:3.6vh}
+#esc .msg{background:#dc2626;border-radius:10px;padding:1vh 1.5vw;font-size:3.4vh;font-weight:700;text-align:center}
+/* ===== Control ===== */
+.scroll-thin::-webkit-scrollbar{width:8px;height:8px}.scroll-thin::-webkit-scrollbar-thumb{background:#334155;border-radius:4px}
+.ptxt{white-space:pre-line;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
+.prev169{position:relative;width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#000}
+@keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.afi{animation:fi .22s ease-out}
+input,select,textarea{font-size:16px}
+@media(min-width:1024px){input,select,textarea{font-size:14px}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+/* =====================================================================
+   PROYECCIÓN · sistema de proyección para la iglesia
+   Vistas: #control (por defecto) · #pantalla · #escenario
+   Tiempo real: Supabase Realtime (WebSocket) + BroadcastChannel local
+   ===================================================================== */
+var APP_NAME = 'Proyección';
+var URL_BASE = "https://nswgxgcibleayhmvajqr.supabase.co";
+var ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zd2d4Z2NpYmxlYXlobXZhanFyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMzA0MDksImV4cCI6MjEwMTgwNjQwOX0.Ir2JnuGPHFjW8rwaPUC6QcVwhjJkAL1dRr8XTo4iWvY";
+var STORE = "proy_v1_session";
+var IGLESIA = '00000000-0000-0000-0000-000000000001';
+var ROLES_OK = ['admin','pastor','lider','servidor'];
+var CID = Math.random().toString(36).slice(2,10);
+var SEQ = 0;
+
+/* ---------------- utilidades ---------------- */
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function norm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
+function hashParams(){ var h=location.hash.replace(/^#/,''); var i=h.indexOf('?'); var v=i>=0?h.slice(0,i):h; var p={}; if(i>=0) h.slice(i+1).split('&').forEach(function(kv){ var a=kv.split('='); if(a[0]) p[decodeURIComponent(a[0])]=decodeURIComponent(a[1]||''); }); return {vista:v||'control', p:p}; }
+function hoyISO(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function fechaTxt(iso){ if(!iso) return ''; var p=iso.split('-'); var d=new Date(+p[0],+p[1]-1,+p[2]); return d.toLocaleDateString('es-HN',{weekday:'short',day:'numeric',month:'short'}); }
+function mmss(ms){ ms=Math.max(0,ms); var s=Math.ceil(ms/1000); var m=Math.floor(s/60); s=s%60; return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); }
+function ri(){ if(window.lucide) try{ lucide.createIcons(); }catch(e){} }
+function baseUrl(){ return location.origin+location.pathname; }
+function debounce(fn,ms){ var t; return function(){ var a=arguments; clearTimeout(t); t=setTimeout(function(){ fn.apply(null,a); },ms); }; }
+function loadScript(src){ return new Promise(function(ok,ko){ var s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=ko; document.head.appendChild(s); }); }
+
+/* ---------------- tema visual ---------------- */
+var PRESETS = {
+  negro:'#000000',
+  noche:'linear-gradient(160deg,#0b1026 0%,#1e2a5a 100%)',
+  morado:'linear-gradient(160deg,#1e1033 0%,#4c1d95 100%)',
+  indigo:'linear-gradient(135deg,#312e81 0%,#6d28d9 100%)',
+  bosque:'linear-gradient(160deg,#052e16 0%,#14532d 100%)',
+  atardecer:'linear-gradient(160deg,#431407 0%,#9a3412 55%,#1c1917 100%)'
+};
+var FUENTES = {
+  sans:"system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif",
+  serif:"Georgia,'Times New Roman',serif",
+  cond:"'Arial Narrow','Roboto Condensed','Helvetica Neue',Arial,sans-serif"
+};
+var TEMA_DEF = { fondo:'noche', fondoColor:'#000000', fondoImg:'', oscurecer:40, color:'#ffffff', fuente:'sans', tam:8, mayus:false, sombra:true, alinear:'center', lineas:4, logoImg:'', logoTexto:'Bienvenidos' };
+function temaFull(t){ return Object.assign({}, TEMA_DEF, t||{}); }
+function fondoCss(t){ return t.fondo==='color' ? t.fondoColor : (PRESETS[t.fondo]||PRESETS.negro); }
+
+/* =====================================================================
+   RENDER DEL ESCENARIO (se usa en la pantalla y en la vista previa)
+   ===================================================================== */
+var STAGES = [];
+function stageEnsure(root){
+  if(root._stg) return root._stg;
+  root.innerHTML =
+    '<div class="stg"><div class="stg-bg"></div><div class="stg-dim"></div>'+
+    '<div class="stg-layer"><div class="stg-box"><div class="stg-t"></div><div class="stg-ref"></div></div></div>'+
+    '<div class="stg-layer"><div class="stg-box"><div class="stg-t"></div><div class="stg-ref"></div></div></div>'+
+    '<div class="stg-cuenta"><div class="cl"></div><div class="cn"></div></div>'+
+    '<div class="stg-logo"></div><div class="stg-msg"><div></div></div><div class="stg-negro"></div></div>';
+  var el=root.firstChild;
+  var g = { root:root, el:el, bg:el.children[0], dim:el.children[1], layers:[el.children[2],el.children[3]], act:0,
+            cuenta:el.children[4], logo:el.children[5], msg:el.children[6], negro:el.children[7], key:null, est:{}, tema:temaFull() };
+  root._stg=g; STAGES.push(g);
+  return g;
+}
+function fitLayer(layer, txt, ref, t, W, H){
+  var box=layer.firstChild, tx=box.children[0], rf=box.children[1];
+  var maxW=W*0.9, maxH=H*(ref?0.76:0.86);
+  tx.textContent=txt; rf.textContent=ref||''; rf.style.display=ref?'block':'none';
+  tx.style.fontFamily=FUENTES[t.fuente]||FUENTES.sans;
+  tx.style.color=t.color; rf.style.color=t.color;
+  tx.style.textTransform=t.mayus?'uppercase':'none';
+  tx.style.textAlign=t.alinear; box.style.alignItems=t.alinear==='left'?'flex-start':'center';
+  tx.style.fontWeight='700';
+  tx.style.width=maxW+'px';
+  var sh=Math.max(1,H*0.004);
+  tx.style.textShadow=t.sombra?('0 '+sh+'px '+(sh*3)+'px rgba(0,0,0,.85)'):'none';
+  rf.style.textShadow=tx.style.textShadow;
+  rf.style.fontSize=Math.max(8,H*0.04)+'px';
+  rf.style.fontFamily=tx.style.fontFamily;
+  var lo=4, hi=Math.max(8,H*(t.tam||8)/100);
+  tx.style.fontSize=hi+'px';
+  if(tx.scrollWidth>maxW+1 || tx.scrollHeight>maxH+1){
+    for(var i=0;i<14;i++){
+      var mid=(lo+hi)/2; tx.style.fontSize=mid+'px';
+      if(tx.scrollWidth>maxW+1 || tx.scrollHeight>maxH+1) hi=mid; else lo=mid;
+    }
+    tx.style.fontSize=lo+'px';
+  }
+}
+function renderStage(root, est, tema){
+  var g=stageEnsure(root); est=est||{}; var t=temaFull(tema);
+  g.est=est; g.tema=t;
+  var W=root.clientWidth||1, H=root.clientHeight||1;
+  g.el.style.background=fondoCss(t);
+  g.bg.style.backgroundImage=t.fondoImg?'url("'+t.fondoImg.replace(/"/g,'')+'")':'none';
+  g.dim.style.opacity=t.fondoImg?(t.oscurecer/100):0;
+  var cuenta=!!(est.cuenta&&est.cuenta.fin);
+  var vis=!cuenta && est.slide && !est.oculto;
+  var txt=vis?(est.slide.texto||''):'', ref=vis?(est.slide.ref||''):'';
+  var k=txt+'\u0001'+ref, sk=JSON.stringify(t)+W+'x'+H;
+  if(k!==g.key){
+    var nx=g.layers[1-g.act], cu=g.layers[g.act];
+    if(txt){ fitLayer(nx,txt,ref,t,W,H); nx.style.opacity=1; } else nx.style.opacity=0;
+    cu.style.opacity=0; g.act=1-g.act; g.key=k; g.sk=sk;
+  } else if(sk!==g.sk && txt){
+    fitLayer(g.layers[g.act],txt,ref,t,W,H); g.sk=sk;
+  }
+  // cuenta regresiva
+  g.cuenta.style.opacity=cuenta?1:0;
+  if(cuenta){
+    g.cuenta.style.fontFamily=FUENTES[t.fuente]||FUENTES.sans; g.cuenta.style.color=t.color;
+    var cl=g.cuenta.children[0], cn=g.cuenta.children[1];
+    cl.textContent=est.cuenta.texto||'Comenzamos en'; cl.style.fontSize=(H*0.06)+'px'; cl.style.fontWeight='600'; cl.style.opacity='.85';
+    cn.style.fontSize=(H*0.26)+'px'; cn.style.fontWeight='800'; cn.textContent=mmss(est.cuenta.fin-Date.now());
+  }
+  // logo
+  if(est.logo){
+    var lk=t.logoImg+'|'+t.logoTexto+'|'+H;
+    if(g.logoKey!==lk){
+      g.logoKey=lk;
+      g.logo.style.background=fondoCss(t);
+      g.logo.innerHTML=t.logoImg?'<img src="'+esc(t.logoImg)+'" alt="">':'<div style="font-weight:800;text-align:center;padding:0 5%;font-size:'+(H*0.11)+'px;color:'+esc(t.color)+';font-family:'+(FUENTES[t.fuente]||FUENTES.sans)+'">'+esc(t.logoTexto||'')+'</div>';
+    }
+  }
+  g.logo.style.opacity=est.logo?1:0;
+  // mensaje
+  var md=g.msg.firstChild;
+  if(est.msg){ md.textContent=est.msg; md.style.fontSize=Math.max(9,H*0.05)+'px'; md.style.padding=(H*0.02)+'px '+(W*0.03)+'px'; }
+  g.msg.classList.toggle('on',!!est.msg);
+  g.negro.style.opacity=est.negro?1:0;
+}
+setInterval(function(){
+  STAGES.forEach(function(g){
+    if(g.est && g.est.cuenta && g.est.cuenta.fin && document.body.contains(g.root)) g.cuenta.children[1].textContent=mmss(g.est.cuenta.fin-Date.now());
+  });
+},250);
+
+/* =====================================================================
+   TIEMPO REAL · Supabase Realtime por WebSocket (sin supabase-js)
+   ===================================================================== */
+function RT(sala, meta){
+  this.topic='realtime:proy-'+sala; this.meta=meta||{}; this.ref=0; this.h={};
+  this.joined=false; this.presence={}; this.retry=0; this.cerrado=false;
+  this.connect();
+  var me=this;
+  this.hb=setInterval(function(){ me.raw({topic:'phoenix',event:'heartbeat',payload:{}}); },25000);
+  document.addEventListener('visibilitychange',function(){ if(!document.hidden && (!me.ws||me.ws.readyState>1)) me.connect(); });
+  window.addEventListener('online',function(){ if(!me.ws||me.ws.readyState>1) me.connect(); });
+}
+RT.prototype.on=function(ev,cb){ (this.h[ev]=this.h[ev]||[]).push(cb); return this; };
+RT.prototype.emit=function(ev,d){ (this.h[ev]||[]).forEach(function(cb){ try{ cb(d); }catch(e){ console.error(e); } }); };
+RT.prototype.raw=function(m){ if(this.ws&&this.ws.readyState===1){ m.ref=String(++this.ref); this.ws.send(JSON.stringify(m)); return m.ref; } return null; };
+RT.prototype.connect=function(){
+  var me=this; if(me.cerrado) return;
+  try{ if(me.ws) me.ws.close(); }catch(e){}
+  var ws=new WebSocket(URL_BASE.replace('https','wss')+'/realtime/v1/websocket?apikey='+ANON+'&vsn=1.0.0');
+  me.ws=ws; me.joined=false; me.emit('estado_conexion');
+  ws.onopen=function(){
+    me.retry=0;
+    var r=String(++me.ref); me.joinRef=r;
+    ws.send(JSON.stringify({topic:me.topic,event:'phx_join',payload:{config:{broadcast:{self:false,ack:false},presence:{key:CID},private:false}},ref:r,join_ref:r}));
+  };
+  ws.onmessage=function(e){
+    var m; try{ m=JSON.parse(e.data); }catch(x){ return; }
+    if(m.topic!==me.topic) return;
+    if(m.event==='phx_reply' && m.ref===me.joinRef){
+      if(m.payload&&m.payload.status==='ok'){
+        me.joined=true;
+        me.raw({topic:me.topic,event:'presence',payload:{type:'presence',event:'track',payload:me.meta},join_ref:me.joinRef});
+        me.emit('estado_conexion'); me.emit('unido');
+      } else { console.warn('join',m.payload); }
+    } else if(m.event==='broadcast' && m.payload){
+      me.emit('msg',{event:m.payload.event, env:m.payload.payload});
+    } else if(m.event==='presence_state'){
+      me.presence=m.payload||{}; me.emit('presencia');
+    } else if(m.event==='presence_diff'){
+      var j=(m.payload&&m.payload.joins)||{}, l=(m.payload&&m.payload.leaves)||{};
+      Object.keys(l).forEach(function(k){ if(!me.presence[k]) return; var refs=(l[k].metas||[]).map(function(x){return x.phx_ref;}); me.presence[k].metas=me.presence[k].metas.filter(function(x){ return refs.indexOf(x.phx_ref)<0; }); if(!me.presence[k].metas.length) delete me.presence[k]; });
+      Object.keys(j).forEach(function(k){ if(!me.presence[k]) me.presence[k]={metas:[]}; me.presence[k].metas=me.presence[k].metas.concat(j[k].metas||[]); });
+      me.emit('presencia');
+    } else if(m.event==='phx_error' || m.event==='phx_close'){
+      try{ ws.close(); }catch(x){}
+    }
+  };
+  ws.onclose=function(){
+    if(me.ws!==ws) return;
+    me.joined=false; me.emit('estado_conexion');
+    var d=[1000,2000,4000,8000,15000][Math.min(me.retry++,4)];
+    setTimeout(function(){ if(me.ws===ws) me.connect(); },d);
+  };
+};
+RT.prototype.send=function(ev,env){
+  if(!this.joined) return false;
+  this.raw({topic:this.topic,event:'broadcast',payload:{type:'broadcast',event:ev,payload:env},join_ref:this.joinRef});
+  return true;
+};
+RT.prototype.cuantos=function(tipo){ var n=0, p=this.presence; Object.keys(p).forEach(function(k){ (p[k].metas||[]).forEach(function(m){ if(m.tipo===tipo) n++; }); }); return n; };
+
+/* -------- bus: mismo equipo (BroadcastChannel) + internet (Realtime) -------- */
+var BUS = { bc:null, rt:null, h:[], last:{} };
+function busInit(){
+  try{ BUS.bc=new BroadcastChannel('proy-local'); BUS.bc.onmessage=function(e){ busRecv(e.data.event, e.data.env); }; }catch(e){}
+}
+function busConectar(sala, meta){
+  if(BUS.rt){ BUS.rt.cerrado=true; try{ BUS.rt.ws.close(); }catch(e){} clearInterval(BUS.rt.hb); }
+  BUS.rt=null; if(!sala) return null;
+  BUS.rt=new RT(sala, meta);
+  BUS.rt.on('msg',function(d){ busRecv(d.event,d.env); });
+  return BUS.rt;
+}
+function busSend(ev, payload){
+  var env={from:CID, seq:++SEQ, p:payload};
+  if(BUS.bc) try{ BUS.bc.postMessage({event:ev, env:env}); }catch(e){}
+  if(BUS.rt) BUS.rt.send(ev, env);
+}
+function busOn(cb){ BUS.h.push(cb); }
+function busRecv(ev, env){
+  if(!env || env.from===CID) return;
+  if((BUS.last[env.from]||0) >= env.seq) return; // duplicado (llegó por los dos canales) o viejo
+  BUS.last[env.from]=env.seq;
+  BUS.h.forEach(function(cb){ try{ cb(ev, env.p, env.from); }catch(e){ console.error(e); } });
+}
+
+/* =====================================================================
+   BIBLIA · Reina-Valera 1909 (dominio público)
+   ===================================================================== */
+var LIBROS = [
+ ['Génesis','gn gen'],['Éxodo','ex exo'],['Levítico','lv lev'],['Números','nm num'],['Deuteronomio','dt deut'],
+ ['Josué','jos'],['Jueces','jue jc'],['Rut','rt rut'],['1 Samuel','1s 1sa 1sam'],['2 Samuel','2s 2sa 2sam'],
+ ['1 Reyes','1r 1re 1rey'],['2 Reyes','2r 2re 2rey'],['1 Crónicas','1cr 1cro'],['2 Crónicas','2cr 2cro'],['Esdras','esd'],
+ ['Nehemías','neh'],['Ester','est'],['Job','job'],['Salmos','sal sl salmo'],['Proverbios','pr prov'],
+ ['Eclesiastés','ec ecl'],['Cantares','cnt cant ct'],['Isaías','is isa'],['Jeremías','jer jr'],['Lamentaciones','lm lam'],
+ ['Ezequiel','ez eze'],['Daniel','dn dan'],['Oseas','os ose'],['Joel','jl joel'],['Amós','am amos'],
+ ['Abdías','abd'],['Jonás','jon'],['Miqueas','mi miq'],['Nahúm','nah'],['Habacuc','hab'],
+ ['Sofonías','sof'],['Hageo','hag'],['Zacarías','zac'],['Malaquías','mal'],['Mateo','mt mat'],
+ ['Marcos','mr mc mar'],['Lucas','lc luc'],['Juan','jn juan jua'],['Hechos','hch hech'],['Romanos','ro rom'],
+ ['1 Corintios','1co 1cor'],['2 Corintios','2co 2cor'],['Gálatas','ga gal'],['Efesios','ef efe'],['Filipenses','fil flp'],
+ ['Colosenses','col'],['1 Tesalonicenses','1ts 1tes'],['2 Tesalonicenses','2ts 2tes'],['1 Timoteo','1ti 1tim'],['2 Timoteo','2ti 2tim'],
+ ['Tito','tit'],['Filemón','flm filem'],['Hebreos','he heb'],['Santiago','stg sant'],['1 Pedro','1p 1pe 1ped'],
+ ['2 Pedro','2p 2pe 2ped'],['1 Juan','1jn 1jua'],['2 Juan','2jn 2jua'],['3 Juan','3jn 3jua'],['Judas','jud'],['Apocalipsis','ap apoc']
+];
+var BIB=null, BIB_P=null;
+function bibliaCargar(){
+  if(BIB) return Promise.resolve(BIB);
+  if(!BIB_P) BIB_P=fetch('biblia-rv1909.json').then(function(r){ if(!r.ok) throw new Error('No se pudo cargar la Biblia'); return r.json(); }).then(function(d){ BIB=d; return d; }).catch(function(e){ BIB_P=null; throw e; });
+  return BIB_P;
+}
+function buscarLibro(tok){
+  tok=tok.replace(/\s+/g,'');
+  for(var i=0;i<LIBROS.length;i++){ if(LIBROS[i][1].split(' ').indexOf(tok)>=0) return i; }
+  for(var j=0;j<LIBROS.length;j++){ if(norm(LIBROS[j][0]).replace(/\s+/g,'')===tok) return j; }
+  if(tok.replace(/^\d/,'').length<2) return -1;
+  for(var k=0;k<LIBROS.length;k++){ if(norm(LIBROS[k][0]).replace(/\s+/g,'').indexOf(tok)===0) return k; }
+  return -1;
+}
+function parseRef(q){
+  var s=norm(q).replace(/[.]/g,' ').replace(/\s+/g,' ').trim();
+  var m=s.match(/^([123])?\s*([a-zñ]+)\s*(\d+)?(?:\s*[:\s,]\s*(\d+)(?:\s*-\s*(\d+))?)?$/);
+  if(!m) return null;
+  var b=buscarLibro((m[1]||'')+m[2]); if(b<0) return null;
+  var c=m[3]?+m[3]:1, v1=m[4]?+m[4]:null, v2=m[5]?+m[5]:null;
+  if(BIB){
+    if(c<1||c>BIB[b].length) return null;
+    var nv=BIB[b][c-1].length;
+    if(v1){ if(v1>nv) return null; if(!v2||v2<v1) v2=v1; if(v2>nv) v2=nv; }
+  } else if(v1 && (!v2||v2<v1)) v2=v1;
+  return {b:b,c:c,v1:v1,v2:v2};
+}
+function refTxt(r){ return LIBROS[r.b][0]+' '+r.c+(r.v1?':'+r.v1+(r.v2&&r.v2!==r.v1?'-'+r.v2:''):''); }
+function partirLargo(t){
+  if(t.length<=230) return [t];
+  var mid=Math.floor(t.length/2), best=-1, bd=1e9;
+  t.replace(/[;:,.!?]\s/g,function(x,i){ var d=Math.abs(i-mid); if(d<bd){ bd=d; best=i+1; } return x; });
+  if(best<0){ best=t.lastIndexOf(' ',mid); if(best<0) best=mid; }
+  return partirLargo(t.slice(0,best).trim()).concat(partirLargo(t.slice(best).trim()));
+}
+function slidesBiblia(r, todo){
+  var cap=BIB[r.b][r.c-1], a=1, z=cap.length;
+  if(!todo && r.v1){ a=r.v1; z=r.v2||r.v1; }
+  var out=[];
+  for(var v=a; v<=z; v++){
+    var partes=partirLargo(cap[v-1]);
+    partes.forEach(function(p,i){ out.push({texto:p, etiqueta:'v. '+v+(partes.length>1?' ('+(i+1)+'/'+partes.length+')':''), ref:LIBROS[r.b][0]+' '+r.c+':'+v+' · RV1909', v:v}); });
+  }
+  return out;
+}
+
+/* =====================================================================
+   CANTOS · separar letra en diapositivas
+   Estrofas separadas por línea en blanco. Etiqueta opcional: [Coro]
+   Una línea sola "[Coro]" repite el coro ya escrito.
+   ===================================================================== */
+function slidesLetra(letra, lineasMax){
+  lineasMax=Math.max(1,+lineasMax||4);
+  var bloques=String(letra||'').replace(/\r/g,'').split(/\n\s*\n/);
+  var mapa={}, out=[], n=0;
+  bloques.forEach(function(b){
+    var ls=b.split('\n').map(function(l){return l.trim();}).filter(function(l){return l;});
+    if(!ls.length) return;
+    var etq=null, m=ls[0].match(/^\[(.+)\]$/);
+    if(m){ etq=m[1].trim(); ls=ls.slice(1); }
+    if(!ls.length){ if(etq && mapa[norm(etq)]) ls=mapa[norm(etq)]; else return; }
+    if(!etq){ n++; etq='Estrofa '+n; }
+    mapa[norm(etq)]=ls;
+    var k=Math.ceil(ls.length/lineasMax), tam=Math.ceil(ls.length/k);
+    for(var i=0;i<k;i++){ out.push({texto:ls.slice(i*tam,(i+1)*tam).join('\n'), etiqueta:etq+(k>1?' ('+(i+1)+'/'+k+')':'')}); }
+  });
+  return out;
+}
+function slidesTexto(t){
+  return String(t||'').replace(/\r/g,'').split(/\n\s*\n/).map(function(b){return b.trim();}).filter(function(b){return b;}).map(function(b,i){ return {texto:b, etiqueta:'Diapositiva '+(i+1)}; });
+}
+
+/* =====================================================================
+   VISTA: PANTALLA (proyector / TV)
+   ===================================================================== */
+function vistaPantalla(p){
+  document.title=APP_NAME+' · Pantalla';
+  var sala=p.sala||localStorage.getItem('proy_sala')||'';
+  if(p.sala) localStorage.setItem('proy_sala',p.sala);
+  $('root').innerHTML='<div id="scr"></div><div id="dot" class="dot" style="background:#f59e0b"></div><div id="hint" class="hint">Toca la pantalla para ver en pantalla completa</div>';
+  var scr=$('scr'), est={}, tema={};
+  try{ est=JSON.parse(localStorage.getItem('proy_ult_estado')||'{}'); tema=JSON.parse(localStorage.getItem('proy_ult_tema')||'{}'); }catch(e){}
+  function pintar(){ renderStage(scr, est, tema); }
+  pintar();
+  window.addEventListener('resize',debounce(pintar,120));
+  document.addEventListener('click',function(){ if(!document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function(){}); $('hint').style.opacity=0; });
+  setTimeout(function(){ var h=$('hint'); if(h) h.style.opacity=0; },8000);
+  pedirPantallaActiva();
+  busInit();
+  busOn(function(ev,d){
+    if(ev==='estado'){ est=d.e||{}; tema=d.t||tema; try{ localStorage.setItem('proy_ult_estado',JSON.stringify(est)); localStorage.setItem('proy_ult_tema',JSON.stringify(tema)); }catch(e){} pintar(); recibido=true; }
+    if(ev==='sala_cambiada'){ localStorage.removeItem('proy_sala'); location.hash='#pantalla'; location.reload(); }
+  });
+  var recibido=false;
+  busSend('pedir_estado',{});
+  if(sala){
+    var rt=busConectar(sala,{tipo:'pantalla'});
+    rt.on('unido',function(){ busSend('pedir_estado',{}); });
+    rt.on('estado_conexion',function(){ var d=$('dot'); d.style.background=rt.joined?'#22c55e':'#f59e0b'; d.style.opacity=1; if(rt.joined) setTimeout(function(){ d.style.opacity=0; },3000); });
+  } else {
+    setTimeout(function(){ if(!recibido) pedirSala('pantalla'); },2500);
+  }
+}
+function pedirSala(vista){
+  var d=document.createElement('div'); d.className='setup';
+  d.innerHTML='<div class="card"><div style="font-size:20px;font-weight:700">Conectar esta pantalla</div>'+
+    '<p style="color:#94a3b8;font-size:14px;margin:8px 0 0">Escribe el código de sala. Lo ves en el control, en el botón <b>Conectar</b>.</p>'+
+    '<input id="salaIn" autocomplete="off" autocapitalize="off" placeholder="código"><button id="salaOk">Conectar</button></div>';
+  document.body.appendChild(d);
+  $('salaIn').focus();
+  function ok(){ var v=$('salaIn').value.trim().toLowerCase(); if(!v) return; localStorage.setItem('proy_sala',v); location.hash='#'+vista+'?sala='+encodeURIComponent(v); location.reload(); }
+  $('salaOk').onclick=ok; $('salaIn').onkeydown=function(e){ if(e.key==='Enter') ok(); };
+}
+var WL=null;
+function pedirPantallaActiva(){
+  function req(){ if('wakeLock' in navigator) navigator.wakeLock.request('screen').then(function(w){ WL=w; }).catch(function(){}); }
+  req(); document.addEventListener('visibilitychange',function(){ if(!document.hidden) req(); });
+}
+
+/* =====================================================================
+   VISTA: ESCENARIO (músicos y púlpito)
+   ===================================================================== */
+function vistaEscenario(p){
+  document.title=APP_NAME+' · Escenario';
+  var sala=p.sala||localStorage.getItem('proy_sala')||'';
+  if(p.sala) localStorage.setItem('proy_sala',p.sala);
+  $('root').innerHTML='<div id="esc"><div class="bar"><div class="badges" id="eBad"></div><div class="timer" id="eTim"></div><div class="reloj" id="eRel"></div></div>'+
+    '<div id="eMsg"></div><div class="act"><div class="lab" id="eLab">En vivo</div><div class="tx"><div id="eTx"></div></div></div>'+
+    '<div class="sig"><div class="lab" id="eSigLab">Siguiente</div><div class="tx" id="eSig"></div></div></div><div id="dot" class="dot" style="background:#f59e0b"></div>';
+  var est={};
+  try{ est=JSON.parse(localStorage.getItem('proy_ult_estado')||'{}'); }catch(e){}
+  function fit(){
+    var el=$('eTx'), box=el.parentNode; var H=box.clientHeight, W=box.clientWidth;
+    el.style.maxWidth=W+'px';
+    var lo=10, hi=Math.max(12,window.innerHeight*0.11);
+    function cabe(){ return el.scrollHeight<=H+1 && el.scrollWidth<=W+1; }
+    el.style.fontSize=hi+'px';
+    if(!cabe()){ for(var i=0;i<14;i++){ var mid=(lo+hi)/2; el.style.fontSize=mid+'px'; if(cabe()) lo=mid; else hi=mid; } el.style.fontSize=lo+'px'; }
+  }
+  function pintar(){
+    var s=est.slide;
+    $('eTx').textContent=s?s.texto:''; $('eLab').textContent='En vivo'+(s&&s.etiqueta?' · '+s.etiqueta:'')+(s&&s.ref?' · '+s.ref:'');
+    $('eSig').textContent=est.next?est.next.texto:'—'; $('eSigLab').textContent='Siguiente'+(est.next&&est.next.etiqueta?' · '+est.next.etiqueta:'');
+    var b=''; if(est.negro) b+='<span style="background:#000;border:2px solid #fff">NEGRO</span>'; if(est.logo) b+='<span style="background:#4f46e5">LOGO</span>'; if(est.oculto) b+='<span style="background:#475569">TEXTO OCULTO</span>';
+    $('eBad').innerHTML=b;
+    $('eMsg').innerHTML=est.msg?'<div class="msg">'+esc(est.msg)+'</div>':'';
+    fit();
+  }
+  setInterval(function(){
+    var d=new Date(); $('eRel').textContent=d.toLocaleTimeString('es-HN',{hour:'2-digit',minute:'2-digit'});
+    $('eTim').textContent=(est.cuenta&&est.cuenta.fin)?mmss(est.cuenta.fin-Date.now()):'';
+  },500);
+  pintar(); window.addEventListener('resize',debounce(fit,120));
+  document.addEventListener('click',function(){ if(!document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function(){}); });
+  pedirPantallaActiva();
+  busInit();
+  busOn(function(ev,d){ if(ev==='estado'){ est=d.e||{}; pintar(); } });
+  busSend('pedir_estado',{});
+  if(sala){
+    var rt=busConectar(sala,{tipo:'escenario'});
+    rt.on('unido',function(){ busSend('pedir_estado',{}); });
+    rt.on('estado_conexion',function(){ var d=$('dot'); d.style.background=rt.joined?'#22c55e':'#f59e0b'; d.style.opacity=1; if(rt.joined) setTimeout(function(){ d.style.opacity=0; },3000); });
+  } else setTimeout(function(){ if(!est.slide) pedirSala('escenario'); },2500);
+}
+
+/* =====================================================================
+   RED Y SESIÓN (mismo patrón que ADULAM: fetch directo a Supabase)
+   ===================================================================== */
+var S = { session:null, user:null, profile:null, sala:null, tema:temaFull(), cultos:[], culto:null, items:[], cantos:[],
+          deck:null, liveDeck:null, live:{slide:null,next:null,negro:false,logo:false,oculto:false,msg:'',cuenta:null,pos:null},
+          tab:'slides', mob:'culto', bq:'', bref:null, cq:'' };
+function req(path, opts, ms){
+  ms=ms||12000; opts=opts||{};
+  var ctrl=new AbortController(), timer=setTimeout(function(){ ctrl.abort(); },ms);
+  opts.signal=ctrl.signal; opts.headers=opts.headers||{};
+  opts.headers.apikey=ANON;
+  if(S.session&&S.session.access_token) opts.headers.Authorization='Bearer '+S.session.access_token;
+  return fetch(URL_BASE+path,opts).then(function(r){ clearTimeout(timer); return r; })
+    .catch(function(e){ clearTimeout(timer); throw new Error(e.name==='AbortError'?'Tiempo de espera agotado':'Sin conexión'); });
+}
+async function asegurarSesion(){
+  if(S.session && expirada(S.session) && S.session.refresh_token){ var f=await refrescar(S.session.refresh_token); if(!f){ clearSession(); location.reload(); } }
+}
+function errTxt(t){ try{ var j=JSON.parse(t); if(j.code==='42P01'||/does not exist|schema cache/.test(j.message||'')) return 'Faltan las tablas de Proyección en Supabase (corre el SQL de instalación).'; return j.message||t; }catch(e){ return t; } }
+async function dbGet(tabla,q){ await asegurarSesion(); var r=await req('/rest/v1/'+tabla+(q?'?'+q:''),{headers:{Accept:'application/json'}}); if(!r.ok) throw new Error(errTxt(await r.text())); return r.json(); }
+async function dbPost(tabla,body){ await asegurarSesion(); var r=await req('/rest/v1/'+tabla,{method:'POST',headers:{'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(body)}); if(!r.ok) throw new Error(errTxt(await r.text())); var t=await r.text(); return t?JSON.parse(t):null; }
+async function dbPatch(tabla,q,body){ await asegurarSesion(); var r=await req('/rest/v1/'+tabla+'?'+q,{method:'PATCH',headers:{'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(body)}); if(!r.ok) throw new Error(errTxt(await r.text())); var t=await r.text(); return t?JSON.parse(t):null; }
+async function dbDel(tabla,q){ await asegurarSesion(); var r=await req('/rest/v1/'+tabla+'?'+q,{method:'DELETE',headers:{Prefer:'return=minimal'}}); if(!r.ok) throw new Error(errTxt(await r.text())); return true; }
+async function dbUpsert(tabla,body,oc){ await asegurarSesion(); var r=await req('/rest/v1/'+tabla+(oc?'?on_conflict='+oc:''),{method:'POST',headers:{'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify(body)}); if(!r.ok) throw new Error(errTxt(await r.text())); var t=await r.text(); return t?JSON.parse(t):null; }
+function saveSession(s){ try{ localStorage.setItem(STORE,JSON.stringify(s)); }catch(e){} S.session=s; }
+function loadSession(){ try{ var s=JSON.parse(localStorage.getItem(STORE)||'null'); return (s&&s.access_token)?s:null; }catch(e){ return null; } }
+function clearSession(){ try{ localStorage.removeItem(STORE); }catch(e){} S.session=null; S.user=null; S.profile=null; }
+function expirada(s){ return !s||!s.expires_at||(Date.now()/1000)>(s.expires_at-60); }
+async function login(email,pass){
+  var r=await req('/auth/v1/token?grant_type=password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,password:pass})},15000);
+  var d=await r.json(); if(!r.ok) throw new Error(d.error_description||d.msg||'Correo o contraseña incorrectos');
+  d.expires_at=Math.floor(Date.now()/1000)+(d.expires_in||3600); saveSession(d); S.user=d.user; return d;
+}
+async function refrescar(rt){
+  try{
+    var r=await req('/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh_token:rt})},10000);
+    if(!r.ok) return null; var d=await r.json(); if(!d.access_token) return null;
+    d.expires_at=Math.floor(Date.now()/1000)+(d.expires_in||3600); saveSession(d); S.user=d.user; return d;
+  }catch(e){ return null; }
+}
+async function salir(){ try{ await req('/auth/v1/logout',{method:'POST'},5000); }catch(e){} clearSession(); location.reload(); }
+
+/* ---------------- UI helpers (control) ---------------- */
+function toast(msg,tipo){
+  var t=document.createElement('div');
+  t.className='fixed left-1/2 -translate-x-1/2 bottom-24 lg:bottom-6 z-[80] px-4 py-3 rounded-xl shadow-2xl text-sm font-medium afi '+(tipo==='err'?'bg-red-600 text-white':'bg-slate-100 text-slate-900');
+  t.textContent=msg; document.body.appendChild(t); setTimeout(function(){ t.remove(); },tipo==='err'?5000:2500);
+}
+function modal(id,titulo,html,ancho){
+  cerrarModal(id);
+  var m=document.createElement('div'); m.id=id;
+  m.className='fixed inset-0 z-[70] bg-black/70 flex items-end sm:items-center justify-center sm:p-4';
+  m.innerHTML='<div class="bg-slate-900 border border-slate-700 text-slate-100 w-full '+(ancho||'sm:max-w-lg')+' max-h-[92dvh] flex flex-col rounded-t-2xl sm:rounded-2xl shadow-2xl afi">'+
+    '<div class="flex items-center justify-between px-4 py-3 border-b border-slate-800"><h3 class="font-bold text-lg">'+titulo+'</h3>'+
+    '<button type="button" onclick="cerrarModal(\''+id+'\')" class="p-2 rounded-lg hover:bg-slate-800"><i data-lucide="x" class="w-5 h-5"></i></button></div>'+
+    '<div class="p-4 overflow-y-auto scroll-thin">'+html+'</div></div>';
+  m.addEventListener('mousedown',function(e){ if(e.target===m) cerrarModal(id); });
+  document.body.appendChild(m); ri(); return m;
+}
+function cerrarModal(id){ var m=$(id); if(m) m.remove(); }
+var INP='w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-indigo-500 outline-none text-slate-100';
+var BTN='px-4 py-2.5 rounded-xl font-semibold transition active:scale-[.98]';
+
+/* =====================================================================
+   VISTA: LOGIN
+   ===================================================================== */
+function vistaLogin(msg){
+  $('root').innerHTML=
+  '<div class="min-h-[100dvh] flex items-center justify-center p-4 bg-slate-950 text-slate-100">'+
+   '<div class="w-full max-w-sm">'+
+    '<div class="text-center mb-6"><div class="inline-flex w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-700 items-center justify-center shadow-xl mb-3"><i data-lucide="presentation" class="w-8 h-8 text-white"></i></div>'+
+    '<h1 class="text-2xl font-bold">'+APP_NAME+'</h1><p class="text-slate-400 text-sm mt-1">Entra con tu usuario de ADULAM</p></div>'+
+    '<form id="fL" class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">'+
+     (msg?'<div class="p-3 rounded-xl bg-amber-500/15 text-amber-300 text-sm">'+esc(msg)+'</div>':'')+
+     '<div><label class="text-sm text-slate-300">Correo</label><input name="email" type="email" required autocomplete="username" class="'+INP+' mt-1"></div>'+
+     '<div><label class="text-sm text-slate-300">Contraseña</label><input name="pass" type="password" required autocomplete="current-password" class="'+INP+' mt-1"></div>'+
+     '<button id="bL" class="'+BTN+' w-full bg-indigo-600 hover:bg-indigo-500 text-white">Entrar</button>'+
+    '</form>'+
+    '<p class="text-center text-xs text-slate-500 mt-4">¿Vas a usar este equipo como pantalla? <a href="#pantalla" onclick="setTimeout(function(){location.reload()},10)" class="text-indigo-400 underline">Abrir pantalla</a></p>'+
+   '</div></div>';
+  ri();
+  $('fL').onsubmit=async function(e){
+    e.preventDefault(); var fd=new FormData(e.target), b=$('bL'); b.disabled=true; b.textContent='Entrando…';
+    try{ await login(fd.get('email').trim(),fd.get('pass')); await iniciarControl(); }
+    catch(x){ b.disabled=false; b.textContent='Entrar'; toast(x.message,'err'); }
+  };
+}
+
+/* =====================================================================
+   VISTA: CONTROL (PC, tablet y celular)
+   ===================================================================== */
+async function iniciarControl(){
+  $('root').innerHTML='<div class="min-h-[100dvh] flex items-center justify-center bg-slate-950 text-slate-400">Cargando…</div>';
+  try{
+    var rows=await dbGet('profiles','id=eq.'+S.user.id+'&select=id,nombre,rol');
+    S.profile=rows&&rows[0];
+  }catch(e){ S.profile=null; }
+  if(!S.profile || ROLES_OK.indexOf(S.profile.rol)<0){
+    clearSession();
+    return vistaLogin('Tu usuario no tiene permiso para Proyección. Pide al administrador de ADULAM el rol de servidor, líder o pastor.');
+  }
+  try{
+    var cf=await dbGet('proy_config','iglesia_id=eq.'+IGLESIA+'&select=*');
+    if(!cf.length) cf=await dbUpsert('proy_config',{iglesia_id:IGLESIA},'iglesia_id');
+    S.sala=cf[0].sala; S.tema=temaFull(cf[0].tema);
+  }catch(e){
+    $('root').innerHTML='<div class="min-h-[100dvh] flex items-center justify-center p-6 bg-slate-950 text-slate-200 text-center"><div><p class="text-lg font-bold mb-2">No se pudo iniciar</p><p class="text-slate-400">'+esc(e.message)+'</p><button onclick="location.reload()" class="'+BTN+' bg-indigo-600 mt-4">Reintentar</button> <button onclick="salir()" class="'+BTN+' bg-slate-800 mt-4">Salir</button></div></div>';
+    return;
+  }
+  try{ var l=JSON.parse(localStorage.getItem('proy_ult_live')||'null'); if(l) S.live=Object.assign(S.live,l,{cuenta:null}); }catch(e){}
+  armarControl();
+  busInit();
+  busOn(recibirControl);
+  var rt=busConectar(S.sala,{tipo:'control',nombre:S.profile.nombre});
+  rt.on('estado_conexion',rTop); rt.on('presencia',rTop);
+  rt.on('unido',function(){ busSend('pedir_estado',{}); });
+  document.addEventListener('keydown',teclas);
+  await Promise.all([cargarCantos(), cargarCultos()]);
+}
+function recibirControl(ev,d){
+  if(ev==='pedir_estado'){ if(S.live.slide||S.live.logo||S.live.negro||S.live.msg||S.live.cuenta) busSend('estado',{e:S.live,t:S.tema}); }
+  else if(ev==='estado'){
+    S.live=Object.assign({},S.live,d.e||{});
+    if(d.t) S.tema=temaFull(d.t);
+    S.liveDeck=S.live.pos?deckPorKey(S.live.pos.key):null;
+    guardarLive(); rVivo(); rCulto(); rCentro(); rMobBar();
+  }
+  else if(ev==='culto'){ if(S.culto && d.id===S.culto.id) cargarItems(); if(d.lista) cargarCultos(true); }
+  else if(ev==='cantos'){ cargarCantos().then(function(){ if(S.culto) cargarItems(); }); }
+  else if(ev==='tema'){ S.tema=temaFull(d.t); rVivo(); reconstruirDecks(); }
+}
+function guardarLive(){ try{ localStorage.setItem('proy_ult_live',JSON.stringify(S.live)); }catch(e){} }
+
+function armarControl(){
+  document.title=APP_NAME;
+  $('root').innerHTML=
+  '<div class="h-[100dvh] flex flex-col bg-slate-950 text-slate-100">'+
+   '<header id="top" class="shrink-0 border-b border-slate-800 bg-slate-900/80"></header>'+
+   '<div class="flex-1 min-h-0 lg:grid lg:grid-cols-[17rem_minmax(0,1fr)_22rem]">'+
+    '<section id="pCulto" class="h-full min-h-0 overflow-y-auto scroll-thin lg:border-r border-slate-800"></section>'+
+    '<section id="pCentro" class="h-full min-h-0 flex-col"></section>'+
+    '<section id="pVivo" class="h-full min-h-0 overflow-y-auto scroll-thin lg:border-l border-slate-800 bg-slate-900/40"></section>'+
+   '</div>'+
+   '<div id="mobBar" class="lg:hidden shrink-0 border-t border-slate-800 bg-slate-900"></div>'+
+   '<nav id="mobNav" class="lg:hidden shrink-0 grid grid-cols-5 bg-slate-900 border-t border-slate-800" style="padding-bottom:env(safe-area-inset-bottom)"></nav>'+
+  '</div>';
+  rTop(); rCulto(); rCentro(); rVivo(); rMobBar(); rMobNav(); aplicarMob();
+}
+function aplicarMob(){
+  var map={culto:'pCulto',slides:'pCentro',cantos:'pCentro',biblia:'pCentro',vivo:'pVivo'};
+  ['pCulto','pCentro','pVivo'].forEach(function(id){
+    var el=$(id), on=map[S.mob]===id;
+    el.classList.toggle('hidden',!on); el.classList.toggle('lg:block',id!=='pCentro'); el.classList.toggle('lg:flex',id==='pCentro');
+    if(id==='pCentro') el.classList.toggle('flex',on);
+  });
+}
+function irMob(t){ S.mob=t; if(t==='slides'||t==='cantos'||t==='biblia'){ S.tab=t; rCentro(); } aplicarMob(); rMobNav(); if(t==='vivo') rVivo(); }
+function rMobNav(){
+  var it=[['culto','list-ordered','Culto'],['slides','presentation','Diapos'],['cantos','music','Cantos'],['biblia','book-open','Biblia'],['vivo','monitor','En vivo']];
+  $('mobNav').innerHTML=it.map(function(x){ var on=S.mob===x[0]; return '<button onclick="irMob(\''+x[0]+'\')" class="py-2 flex flex-col items-center gap-0.5 text-[11px] '+(on?'text-indigo-400':'text-slate-400')+'"><i data-lucide="'+x[1]+'" class="w-5 h-5"></i>'+x[2]+'</button>'; }).join('');
+  ri();
+}
+
+/* ---------- barra superior ---------- */
+function rTop(){
+  var el=$('top'); if(!el) return;
+  var rt=BUS.rt, ok=rt&&rt.joined, np=rt?rt.cuantos('pantalla'):0, ne=rt?rt.cuantos('escenario'):0, nc=rt?rt.cuantos('control'):0;
+  el.innerHTML='<div class="flex items-center gap-2 px-3 py-2">'+
+    '<div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-600 to-violet-700 flex items-center justify-center shrink-0"><i data-lucide="presentation" class="w-4 h-4"></i></div>'+
+    '<button onclick="modalCultos()" class="min-w-0 flex-1 lg:flex-none text-left px-2 py-1 rounded-lg hover:bg-slate-800"><div class="text-[11px] text-slate-400 leading-none">Culto</div><div class="font-semibold truncate">'+(S.culto?esc(fechaTxt(S.culto.fecha)+' · '+S.culto.nombre):'Elegir culto')+' <i data-lucide="chevron-down" class="w-3.5 h-3.5 inline"></i></div></button>'+
+    '<div class="hidden lg:block flex-1"></div>'+
+    '<button onclick="modalConectar()" title="Conexión" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-sm">'+
+      '<span class="w-2.5 h-2.5 rounded-full '+(ok?'bg-green-500':'bg-amber-500 animate-pulse')+'"></span>'+
+      '<i data-lucide="monitor" class="w-4 h-4 text-slate-400"></i><span>'+np+'</span>'+
+      '<span class="hidden sm:inline text-slate-500">·</span><i data-lucide="mic-vocal" class="hidden sm:inline w-4 h-4 text-slate-400"></i><span class="hidden sm:inline">'+ne+'</span>'+
+      '<span class="hidden sm:inline text-slate-500">·</span><i data-lucide="smartphone" class="hidden sm:inline w-4 h-4 text-slate-400"></i><span class="hidden sm:inline">'+nc+'</span></button>'+
+    '<button onclick="abrirPantallaLocal()" class="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold"><i data-lucide="external-link" class="w-4 h-4"></i>Abrir pantalla</button>'+
+    '<button onclick="modalTema()" title="Tema" class="p-2 rounded-lg hover:bg-slate-800"><i data-lucide="palette" class="w-5 h-5"></i></button>'+
+    '<button onclick="modalMenu()" title="Menú" class="p-2 rounded-lg hover:bg-slate-800"><i data-lucide="menu" class="w-5 h-5"></i></button>'+
+  '</div>';
+  ri();
+}
+function modalMenu(){
+  modal('mMenu','Menú',
+    '<div class="text-sm text-slate-400 mb-3">'+esc(S.profile.nombre||'')+' · '+esc(S.profile.rol)+'</div>'+
+    '<div class="grid gap-2">'+
+    '<button onclick="cerrarModal(\'mMenu\');modalConectar()" class="'+BTN+' bg-slate-800 hover:bg-slate-700 text-left flex items-center gap-2"><i data-lucide="qr-code" class="w-4 h-4"></i>Conectar pantallas y celulares</button>'+
+    '<button onclick="cerrarModal(\'mMenu\');abrirPantallaLocal()" class="'+BTN+' bg-slate-800 hover:bg-slate-700 text-left flex items-center gap-2"><i data-lucide="external-link" class="w-4 h-4"></i>Abrir pantalla en este equipo</button>'+
+    '<button onclick="cerrarModal(\'mMenu\');modalTema()" class="'+BTN+' bg-slate-800 hover:bg-slate-700 text-left flex items-center gap-2"><i data-lucide="palette" class="w-4 h-4"></i>Tema visual</button>'+
+    '<button onclick="cerrarModal(\'mMenu\');modalAtajos()" class="'+BTN+' bg-slate-800 hover:bg-slate-700 text-left flex items-center gap-2"><i data-lucide="keyboard" class="w-4 h-4"></i>Atajos de teclado</button>'+
+    '<button onclick="salir()" class="'+BTN+' bg-red-600/20 text-red-300 hover:bg-red-600/30 text-left flex items-center gap-2"><i data-lucide="log-out" class="w-4 h-4"></i>Cerrar sesión</button></div>');
+}
+function modalAtajos(){
+  var a=[['→ · Espacio · PgDn','Siguiente'],['← · PgUp','Anterior'],['B','Pantalla negra'],['L','Logo'],['H','Ocultar texto'],['Esc','Limpiar todo']];
+  modal('mAt','Atajos de teclado','<div class="space-y-2">'+a.map(function(x){ return '<div class="flex justify-between gap-4"><kbd class="px-2 py-1 rounded bg-slate-800 text-sm">'+x[0]+'</kbd><span class="text-slate-300">'+x[1]+'</span></div>'; }).join('')+'</div>');
+}
+function abrirPantallaLocal(){
+  window.open(baseUrl()+'#pantalla?sala='+encodeURIComponent(S.sala),'proy_pantalla','popup,width=960,height=540');
+  toast('Arrastra la ventana al proyector y haz clic en ella para pantalla completa');
+}
+
+/* ---------- conectar (QR y enlaces) ---------- */
+async function modalConectar(){
+  var lp=baseUrl()+'#pantalla?sala='+encodeURIComponent(S.sala), le=baseUrl()+'#escenario?sala='+encodeURIComponent(S.sala), lc=baseUrl();
+  function fila(ic,t,d,url,id){ return '<div class="p-3 rounded-xl bg-slate-950 border border-slate-800"><div class="flex items-center gap-2 font-semibold"><i data-lucide="'+ic+'" class="w-4 h-4 text-indigo-400"></i>'+t+'</div><p class="text-xs text-slate-400 mt-0.5">'+d+'</p>'+
+    '<div class="flex gap-2 mt-2"><input readonly value="'+esc(url)+'" class="'+INP+' text-xs !py-2"><button onclick="copiar(\''+esc(url)+'\')" class="'+BTN+' !px-3 bg-slate-800 hover:bg-slate-700"><i data-lucide="copy" class="w-4 h-4"></i></button><button onclick="verQR(\''+id+'\',\''+esc(url)+'\')" class="'+BTN+' !px-3 bg-slate-800 hover:bg-slate-700"><i data-lucide="qr-code" class="w-4 h-4"></i></button></div><div id="'+id+'" class="mt-2 flex justify-center"></div></div>'; }
+  modal('mCon','Conectar',
+    '<div class="text-center mb-4"><div class="text-xs text-slate-400">Código de sala</div><div class="text-3xl font-bold tracking-[.2em] text-indigo-300">'+esc(S.sala)+'</div>'+
+    '<p class="text-xs text-slate-500 mt-1">Quien tenga este código puede ver la proyección. Cámbialo si se compartió por error.</p></div>'+
+    '<div class="space-y-3">'+
+     fila('monitor','Pantalla principal','Ábrelo en la PC del proyector o en el navegador de la Smart TV.',lp,'qr1')+
+     fila('mic-vocal','Escenario','Para el monitor de músicos o el púlpito: actual, siguiente y reloj.',le,'qr2')+
+     fila('smartphone','Control desde celular','Entra con tu usuario de ADULAM (servidor, líder o pastor).',lc,'qr3')+
+    '</div>'+
+    '<button onclick="cambiarSala()" class="'+BTN+' w-full mt-4 bg-slate-800 hover:bg-slate-700 text-sm"><i data-lucide="refresh-cw" class="w-4 h-4 inline"></i> Cambiar código de sala</button>');
+  verQR('qr1',lp);
+}
+async function verQR(id,url){
+  var el=$(id); if(!el) return;
+  if(el.innerHTML){ el.innerHTML=''; return; }
+  try{
+    if(!window.qrcode) await loadScript('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js');
+    var q=qrcode(0,'M'); q.addData(url); q.make();
+    el.innerHTML='<div class="bg-white p-3 rounded-xl">'+q.createSvgTag(5,0)+'</div>';
+  }catch(e){ el.innerHTML='<p class="text-xs text-slate-500">No se pudo generar el QR (sin internet).</p>'; }
+}
+function copiar(t){ if(navigator.clipboard) navigator.clipboard.writeText(t).then(function(){ toast('Copiado'); },function(){ toast('No se pudo copiar','err'); }); }
+async function cambiarSala(){
+  if(!confirm('Las pantallas conectadas se desconectarán y habrá que conectarlas con el código nuevo. ¿Continuar?')) return;
+  var nueva=Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,6);
+  try{
+    busSend('sala_cambiada',{});
+    await dbPatch('proy_config','iglesia_id=eq.'+IGLESIA,{sala:nueva,updated_at:new Date().toISOString()});
+    S.sala=nueva;
+    var rt=busConectar(S.sala,{tipo:'control',nombre:S.profile.nombre});
+    rt.on('estado_conexion',rTop); rt.on('presencia',rTop);
+    cerrarModal('mCon'); modalConectar(); toast('Código cambiado');
+  }catch(e){ toast(e.message,'err'); }
+}
+
+/* ---------- cultos ---------- */
+async function cargarCultos(soloLista){
+  try{
+    S.cultos=await dbGet('proy_cultos','iglesia_id=eq.'+IGLESIA+'&select=*&order=fecha.desc,created_at.desc&limit=40');
+    if(soloLista){ if(S.culto && !S.cultos.some(function(c){return c.id===S.culto.id;})){ S.culto=null; S.items=[]; rCulto(); } rTop(); return; }
+    var guard=localStorage.getItem('proy_culto'), hoy=hoyISO();
+    var c=S.cultos.find(function(x){return x.id===guard;}) || S.cultos.find(function(x){return x.fecha===hoy;});
+    if(!c){ var fut=S.cultos.filter(function(x){return x.fecha>=hoy;}); c=fut.length?fut[fut.length-1]:null; }
+    if(c) await elegirCulto(c.id,true); else { rTop(); rCulto(); }
+  }catch(e){ toast(e.message,'err'); rCulto(); }
+}
+async function elegirCulto(id,silencio){
+  S.culto=S.cultos.find(function(x){return x.id===id;})||null;
+  if(S.culto) localStorage.setItem('proy_culto',id);
+  rTop(); await cargarItems(); cerrarModal('mCul');
+  if(!silencio && window.innerWidth<1024) irMob('culto');
+}
+async function cargarItems(){
+  if(!S.culto){ S.items=[]; rCulto(); return; }
+  try{
+    S.items=await dbGet('proy_culto_items','culto_id=eq.'+S.culto.id+'&select=*,canto:proy_cantos(id,titulo,autor,tono,letra)&order=posicion.asc,created_at.asc');
+    if(S.items.some(function(i){return i.tipo==='biblia';})) await bibliaCargar().catch(function(){ toast('No se pudo cargar la Biblia','err'); });
+  }catch(e){ toast(e.message,'err'); }
+  reconstruirDecks(); rCulto(); rMobBar();
+}
+function modalCultos(){
+  var lista=S.cultos.map(function(c){
+    var on=S.culto&&S.culto.id===c.id;
+    return '<div class="flex items-center gap-2 p-2 rounded-xl '+(on?'bg-indigo-600/20 border border-indigo-500/40':'hover:bg-slate-800')+'">'+
+      '<button onclick="elegirCulto(\''+c.id+'\')" class="flex-1 text-left"><div class="font-semibold">'+esc(c.nombre)+'</div><div class="text-xs text-slate-400">'+esc(fechaTxt(c.fecha))+(c.fecha===hoyISO()?' · hoy':'')+'</div></button>'+
+      '<button onclick="borrarCulto(\''+c.id+'\')" class="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-800" title="Eliminar"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>';
+  }).join('')||'<p class="text-slate-500 text-sm text-center py-4">Todavía no hay cultos.</p>';
+  modal('mCul','Cultos',
+    '<form id="fCul" class="grid grid-cols-[1fr_auto] gap-2 mb-4"><input name="nombre" required value="Culto dominical" class="'+INP+'" placeholder="Nombre">'+
+    '<input name="fecha" type="date" required value="'+hoyISO()+'" class="'+INP+'"><button class="'+BTN+' col-span-2 bg-indigo-600 hover:bg-indigo-500"><i data-lucide="plus" class="w-4 h-4 inline"></i> Crear culto</button></form>'+
+    '<div class="space-y-1">'+lista+'</div>');
+  $('fCul').onsubmit=async function(e){
+    e.preventDefault(); var fd=new FormData(e.target);
+    try{
+      var r=await dbPost('proy_cultos',{iglesia_id:IGLESIA,nombre:fd.get('nombre').trim(),fecha:fd.get('fecha')});
+      S.cultos.unshift(r[0]); S.cultos.sort(function(a,b){ return a.fecha<b.fecha?1:-1; });
+      busSend('culto',{id:r[0].id,lista:true}); await elegirCulto(r[0].id);
+    }catch(x){ toast(x.message,'err'); }
+  };
+}
+async function borrarCulto(id){
+  var c=S.cultos.find(function(x){return x.id===id;}); if(!c) return;
+  if(!confirm('¿Eliminar "'+c.nombre+'" del '+fechaTxt(c.fecha)+'? Se borra su orden de culto (los cantos quedan en la biblioteca).')) return;
+  try{
+    await dbDel('proy_cultos','id=eq.'+id);
+    S.cultos=S.cultos.filter(function(x){return x.id!==id;});
+    if(S.culto&&S.culto.id===id){ S.culto=null; S.items=[]; localStorage.removeItem('proy_culto'); rCulto(); rTop(); }
+    busSend('culto',{id:id,lista:true}); modalCultos();
+  }catch(e){ toast(e.message,'err'); }
+}
+
+/* ---------- decks (conjuntos de diapositivas) ---------- */
+var DECKS={};
+function deckItem(it){
+  var d={key:'it:'+it.id, item:it, tipo:it.tipo, slides:[]};
+  if(it.tipo==='canto'){ var c=it.canto; d.titulo=c?c.titulo:(it.titulo||'Canto eliminado'); d.sub=c?(c.autor||''):''; d.slides=c?slidesLetra(c.letra,S.tema.lineas):[]; }
+  else if(it.tipo==='biblia'){ d.titulo=it.ref||'Biblia'; d.sub='RV1909'; var r=parseRef(it.ref||''); d.slides=(r&&BIB)?slidesBiblia(r):[]; }
+  else { d.titulo=it.titulo||'Texto'; d.sub='Texto'; d.slides=slidesTexto(it.contenido); }
+  DECKS[d.key]=d; return d;
+}
+function deckCanto(c){ var d={key:'ct:'+c.id, canto:c, tipo:'canto', titulo:c.titulo, sub:c.autor||'', slides:slidesLetra(c.letra,S.tema.lineas)}; DECKS[d.key]=d; return d; }
+function deckCap(b,c){ var d={key:'bb:'+b+':'+c, tipo:'biblia', titulo:LIBROS[b][0]+' '+c, sub:'RV1909', b:b, c:c, slides:slidesBiblia({b:b,c:c},true)}; DECKS[d.key]=d; return d; }
+function deckPorKey(k){
+  if(!k) return null;
+  if(k.indexOf('it:')===0){ var it=S.items.find(function(x){return 'it:'+x.id===k;}); return it?deckItem(it):null; }
+  if(k.indexOf('ct:')===0){ var c=S.cantos.find(function(x){return 'ct:'+x.id===k;}); return c?deckCanto(c):null; }
+  if(k.indexOf('bb:')===0 && BIB){ var p=k.split(':'); return deckCap(+p[1],+p[2]); }
+  return DECKS[k]||null;
+}
+function reconstruirDecks(){
+  if(S.deck){ var d=deckPorKey(S.deck.key); S.deck=d; }
+  var lk=S.liveDeck?S.liveDeck.key:(S.live.pos&&S.live.pos.key);
+  if(lk){ var l=deckPorKey(lk); if(l) S.liveDeck=l; }
+  rCentro();
+}
+
+/* ---------- panel: orden del culto ---------- */
+function icoTipo(t){ return t==='canto'?'music':t==='biblia'?'book-open':'text'; }
+function rCulto(){
+  var el=$('pCulto'); if(!el) return;
+  if(!S.culto){
+    el.innerHTML='<div class="p-6 text-center text-slate-400"><i data-lucide="calendar-plus" class="w-10 h-10 mx-auto mb-3 opacity-50"></i><p class="mb-4">No hay un culto elegido.</p><button onclick="modalCultos()" class="'+BTN+' bg-indigo-600 hover:bg-indigo-500 text-white">Crear o elegir culto</button></div>';
+    ri(); return;
+  }
+  var liveK=S.liveDeck&&S.liveDeck.key, selK=S.deck&&S.deck.key;
+  var lista=S.items.map(function(it,i){
+    var k='it:'+it.id, d=DECKS[k]||deckItem(it), live=liveK===k, sel=selK===k;
+    return '<div class="group flex items-center gap-2 px-2 py-2 rounded-xl cursor-pointer '+(sel?'bg-slate-800':'hover:bg-slate-900')+(live?' ring-2 ring-red-500':'')+'" onclick="abrirItem(\''+it.id+'\')">'+
+      '<div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 '+(it.tipo==='canto'?'bg-violet-500/20 text-violet-300':it.tipo==='biblia'?'bg-amber-500/20 text-amber-300':'bg-sky-500/20 text-sky-300')+'"><i data-lucide="'+icoTipo(it.tipo)+'" class="w-4 h-4"></i></div>'+
+      '<div class="min-w-0 flex-1"><div class="font-medium truncate">'+esc(d.titulo)+'</div><div class="text-xs text-slate-400 truncate">'+(live?'<span class="text-red-400 font-semibold">● EN VIVO</span> · ':'')+esc(d.sub||'')+' · '+d.slides.length+' diap.</div></div>'+
+      '<div class="flex shrink-0 lg:hidden lg:group-hover:flex" onclick="event.stopPropagation()">'+
+        (it.tipo==='texto'?'<button onclick="modalTexto(\''+it.id+'\')" class="p-1.5 rounded hover:bg-slate-700 text-slate-400" title="Editar"><i data-lucide="pencil" class="w-4 h-4"></i></button>':'')+
+        '<button onclick="moverItem('+i+',-1)" class="p-1.5 rounded hover:bg-slate-700 text-slate-400'+(i===0?' invisible':'')+'" title="Subir"><i data-lucide="chevron-up" class="w-4 h-4"></i></button>'+
+        '<button onclick="moverItem('+i+',1)" class="p-1.5 rounded hover:bg-slate-700 text-slate-400'+(i===S.items.length-1?' invisible':'')+'" title="Bajar"><i data-lucide="chevron-down" class="w-4 h-4"></i></button>'+
+        '<button onclick="quitarItem(\''+it.id+'\')" class="p-1.5 rounded hover:bg-slate-700 text-slate-500 hover:text-red-400" title="Quitar"><i data-lucide="x" class="w-4 h-4"></i></button>'+
+      '</div></div>';
+  }).join('');
+  el.innerHTML='<div class="p-3">'+
+    '<div class="flex items-center justify-between mb-2"><h2 class="font-bold">Orden del culto</h2><span class="text-xs text-slate-500">'+S.items.length+' elementos</span></div>'+
+    '<div class="grid grid-cols-3 gap-1.5 mb-3">'+
+      '<button onclick="modalAgregarCanto()" class="py-2 rounded-xl bg-violet-500/15 text-violet-200 hover:bg-violet-500/25 text-sm font-medium"><i data-lucide="music" class="w-4 h-4 inline"></i> Canto</button>'+
+      '<button onclick="modalAgregarBiblia()" class="py-2 rounded-xl bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 text-sm font-medium"><i data-lucide="book-open" class="w-4 h-4 inline"></i> Biblia</button>'+
+      '<button onclick="modalTexto()" class="py-2 rounded-xl bg-sky-500/15 text-sky-200 hover:bg-sky-500/25 text-sm font-medium"><i data-lucide="text" class="w-4 h-4 inline"></i> Texto</button></div>'+
+    '<div class="space-y-1">'+(lista||'<p class="text-sm text-slate-500 text-center py-6">Agrega cantos, lecturas o textos.</p>')+'</div></div>';
+  ri();
+}
+function abrirItem(id){
+  var it=S.items.find(function(x){return x.id===id;}); if(!it) return;
+  S.deck=deckItem(it); S.tab='slides'; rCulto(); rCentro();
+  if(window.innerWidth<1024) irMob('slides');
+}
+async function sigPos(){ return S.items.length?Math.max.apply(null,S.items.map(function(x){return x.posicion||0;}))+1:1; }
+async function agregarItem(obj){
+  if(!S.culto){ toast('Primero crea o elige un culto','err'); return; }
+  obj.culto_id=S.culto.id; obj.posicion=await sigPos();
+  try{ await dbPost('proy_culto_items',obj); await cargarItems(); busSend('culto',{id:S.culto.id}); toast('Agregado al culto'); }
+  catch(e){ toast(e.message,'err'); }
+}
+async function moverItem(i,dir){
+  var a=S.items[i], b=S.items[i+dir]; if(!a||!b) return;
+  var pa=a.posicion, pb=b.posicion; if(pa===pb){ pb=pa+dir; }
+  S.items[i]=b; S.items[i+dir]=a; a.posicion=pb; b.posicion=pa; rCulto();
+  try{ await Promise.all([dbPatch('proy_culto_items','id=eq.'+a.id,{posicion:pb}),dbPatch('proy_culto_items','id=eq.'+b.id,{posicion:pa})]); busSend('culto',{id:S.culto.id}); }
+  catch(e){ toast(e.message,'err'); cargarItems(); }
+}
+async function quitarItem(id){
+  var it=S.items.find(function(x){return x.id===id;}); if(!it) return;
+  if(!confirm('¿Quitar "'+(DECKS['it:'+id]||{}).titulo+'" del culto?')) return;
+  try{ await dbDel('proy_culto_items','id=eq.'+id); if(S.deck&&S.deck.key==='it:'+id) S.deck=null; await cargarItems(); busSend('culto',{id:S.culto.id}); }
+  catch(e){ toast(e.message,'err'); }
+}
+function modalAgregarCanto(){
+  modal('mAC','Agregar canto',
+    '<input id="acQ" placeholder="Buscar por título, autor o letra…" class="'+INP+' mb-3" autocomplete="off">'+
+    '<div id="acL" class="space-y-1 max-h-[55dvh] overflow-y-auto scroll-thin"></div>'+
+    '<button onclick="cerrarModal(\'mAC\');editarCanto()" class="'+BTN+' w-full mt-3 bg-slate-800 hover:bg-slate-700"><i data-lucide="plus" class="w-4 h-4 inline"></i> Canto nuevo</button>');
+  function pinta(){
+    var q=norm($('acQ').value), l=S.cantos.filter(function(c){ return !q || norm(c.titulo+' '+(c.autor||'')+' '+c.letra).indexOf(q)>=0; }).slice(0,80);
+    $('acL').innerHTML=l.map(function(c){ return '<button onclick="cerrarModal(\'mAC\');agregarItem({tipo:\'canto\',canto_id:\''+c.id+'\',titulo:'+esc(JSON.stringify(c.titulo))+'})" class="w-full text-left p-2.5 rounded-xl hover:bg-slate-800"><div class="font-medium">'+esc(c.titulo)+'</div><div class="text-xs text-slate-400">'+esc(c.autor||'')+(c.tono?' · '+esc(c.tono):'')+'</div></button>'; }).join('')||'<p class="text-sm text-slate-500 text-center py-4">'+(S.cantos.length?'Sin resultados.':'Tu biblioteca está vacía. Crea el primer canto.')+'</p>';
+  }
+  $('acQ').oninput=pinta; pinta(); $('acQ').focus();
+}
+async function modalAgregarBiblia(){
+  modal('mAB','Agregar lectura',
+    '<input id="abQ" placeholder="Ej.: jn 3 16-18 · sal 23 · 1 co 13 4-7" class="'+INP+'" autocomplete="off">'+
+    '<div id="abP" class="mt-3 text-sm text-slate-400 min-h-[3rem]">Cargando Biblia…</div>'+
+    '<button id="abOk" disabled class="'+BTN+' w-full mt-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40">Agregar al culto</button>');
+  try{ await bibliaCargar(); }catch(e){ $('abP').textContent=e.message; return; }
+  var r=null;
+  function pinta(){
+    r=parseRef($('abQ').value); $('abOk').disabled=!r;
+    if(!r){ $('abP').innerHTML=$('abQ').value?'No encuentro esa referencia.':'Escribe libro, capítulo y versículos.'; return; }
+    var sl=slidesBiblia(r);
+    $('abP').innerHTML='<div class="font-semibold text-slate-200 mb-1">'+esc(refTxt(r))+' · '+sl.length+' diap.</div><div class="text-slate-400 line-clamp-3">'+esc(sl.map(function(s){return s.texto;}).join(' '))+'</div>';
+  }
+  $('abQ').oninput=pinta; pinta(); $('abQ').focus();
+  $('abQ').onkeydown=function(e){ if(e.key==='Enter'&&r) $('abOk').click(); };
+  $('abOk').onclick=function(){ if(!r) return; cerrarModal('mAB'); agregarItem({tipo:'biblia',ref:refTxt(r),titulo:refTxt(r)}); };
+}
+function modalTexto(id){
+  var it=id?S.items.find(function(x){return x.id===id;}):null;
+  modal('mTx',it?'Editar texto':'Agregar texto',
+    '<form id="fTx" class="space-y-3"><div><label class="text-sm text-slate-300">Título</label><input name="titulo" required value="'+esc(it?it.titulo:'')+'" placeholder="Ej.: Anuncios, Bienvenida, Puntos del sermón" class="'+INP+' mt-1"></div>'+
+    '<div><label class="text-sm text-slate-300">Contenido</label><textarea name="contenido" rows="9" class="'+INP+' mt-1 font-mono text-sm" placeholder="Separa cada diapositiva con una línea en blanco.">'+esc(it?it.contenido:'')+'</textarea></div>'+
+    '<button class="'+BTN+' w-full bg-indigo-600 hover:bg-indigo-500">Guardar</button></form>');
+  $('fTx').onsubmit=async function(e){
+    e.preventDefault(); var fd=new FormData(e.target), o={titulo:fd.get('titulo').trim(),contenido:fd.get('contenido')};
+    cerrarModal('mTx');
+    if(it){ try{ await dbPatch('proy_culto_items','id=eq.'+it.id,o); await cargarItems(); busSend('culto',{id:S.culto.id}); }catch(x){ toast(x.message,'err'); } }
+    else { o.tipo='texto'; agregarItem(o); }
+  };
+}
+
+/* ---------- panel central: diapositivas / cantos / biblia ---------- */
+function rCentro(){
+  var el=$('pCentro'); if(!el) return;
+  var tabs=[['slides','presentation','Diapositivas'],['cantos','music','Cantos'],['biblia','book-open','Biblia']];
+  var cab='<div class="hidden lg:flex shrink-0 gap-1 p-2 border-b border-slate-800">'+tabs.map(function(t){ var on=S.tab===t[0]; return '<button onclick="S.tab=\''+t[0]+'\';rCentro()" class="px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5 '+(on?'bg-slate-800 text-white':'text-slate-400 hover:text-white')+'"><i data-lucide="'+t[1]+'" class="w-4 h-4"></i>'+t[2]+'</button>'; }).join('')+'</div>';
+  var cuerpo=S.tab==='cantos'?htmlCantos():S.tab==='biblia'?htmlBiblia():htmlSlides();
+  var y=el.querySelector('#cBody')?el.querySelector('#cBody').scrollTop:0, mismo=el._tab===S.tab;
+  el.innerHTML=cab+'<div id="cBody" class="flex-1 min-h-0 overflow-y-auto scroll-thin">'+cuerpo+'</div>';
+  el._tab=S.tab;
+  if(mismo) $('cBody').scrollTop=y;
+  ri();
+  if(S.tab==='cantos'){ var q=$('cq'); if(q){ q.oninput=debounce(function(){ S.cq=q.value; var l=$('cList'); if(l) { l.innerHTML=listaCantosHtml(); ri(); } },150); } }
+  if(S.tab==='biblia'){ var b=$('bq'); if(b){ b.oninput=debounce(function(){ S.bq=b.value; buscarBiblia(); },250); b.onkeydown=function(e){ if(e.key==='Enter'){ S.bq=b.value; buscarBiblia(true); } }; } if(!BIB) bibliaCargar().then(function(){ if(S.tab==='biblia') rCentro(); }).catch(function(e){ toast(e.message,'err'); }); }
+}
+function tarjeta(deck,s,i){
+  var live=S.liveDeck&&S.liveDeck.key===deck.key&&S.live.pos&&S.live.pos.idx===i;
+  return '<button id="sl-'+i+'" onclick="irSlide(\''+deck.key+'\','+i+')" class="text-left rounded-xl border-2 p-3 min-h-[6.5rem] transition '+(live?'border-red-500 bg-red-500/10':'border-slate-800 bg-slate-900 hover:border-slate-600')+'">'+
+    '<div class="flex items-center justify-between text-[11px] mb-1"><span class="font-semibold uppercase tracking-wide '+(live?'text-red-400':'text-slate-500')+'">'+esc(s.etiqueta||'')+'</span><span class="text-slate-600">'+(i+1)+'</span></div>'+
+    '<div class="ptxt text-sm leading-snug text-slate-200">'+esc(s.texto)+'</div></button>';
+}
+function htmlSlides(){
+  var d=S.deck;
+  if(!d) return '<div class="p-8 text-center text-slate-500"><i data-lucide="mouse-pointer-click" class="w-10 h-10 mx-auto mb-3 opacity-50"></i><p>Toca un elemento del culto, un canto o una lectura para ver sus diapositivas.</p></div>';
+  var acc='';
+  if(d.key.indexOf('ct:')===0) acc='<button onclick="agregarItem({tipo:\'canto\',canto_id:\''+d.canto.id+'\',titulo:'+esc(JSON.stringify(d.canto.titulo))+'})" class="'+BTN+' !py-1.5 text-sm bg-indigo-600 hover:bg-indigo-500">Agregar al culto</button><button onclick="editarCanto(\''+d.canto.id+'\')" class="'+BTN+' !py-1.5 text-sm bg-slate-800 hover:bg-slate-700">Editar</button>';
+  else if(d.item&&d.item.tipo==='canto'&&d.item.canto) acc='<button onclick="editarCanto(\''+d.item.canto.id+'\')" class="'+BTN+' !py-1.5 text-sm bg-slate-800 hover:bg-slate-700">Editar canto</button>';
+  else if(d.item&&d.item.tipo==='texto') acc='<button onclick="modalTexto(\''+d.item.id+'\')" class="'+BTN+' !py-1.5 text-sm bg-slate-800 hover:bg-slate-700">Editar</button>';
+  return '<div class="p-3"><div class="flex flex-wrap items-center gap-2 mb-3"><div class="min-w-0 flex-1"><h2 class="font-bold text-lg truncate">'+esc(d.titulo)+'</h2><div class="text-xs text-slate-400">'+esc(d.sub||'')+' · '+d.slides.length+' diapositivas</div></div>'+acc+'</div>'+
+    (d.slides.length?'<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">'+d.slides.map(function(s,i){ return tarjeta(d,s,i); }).join('')+'</div>':'<p class="text-slate-500 text-center py-8">Este elemento no tiene diapositivas.</p>')+'</div>';
+}
+function listaCantosHtml(){
+  var q=norm(S.cq);
+  var l=S.cantos.filter(function(c){ return !q || norm(c.titulo+' '+(c.autor||'')+' '+c.letra).indexOf(q)>=0; });
+  return l.map(function(c){ var sel=S.deck&&S.deck.key==='ct:'+c.id; return '<button onclick="abrirCanto(\''+c.id+'\')" class="w-full text-left p-2.5 rounded-xl '+(sel?'bg-slate-800':'hover:bg-slate-900')+'"><div class="font-medium">'+esc(c.titulo)+'</div><div class="text-xs text-slate-400">'+esc(c.autor||'Sin autor')+(c.tono?' · Tono '+esc(c.tono):'')+'</div></button>'; }).join('')||'<p class="text-sm text-slate-500 text-center py-6">'+(S.cantos.length?'Sin resultados.':'La biblioteca está vacía. Crea el primer canto.')+'</p>';
+}
+function htmlCantos(){
+  return '<div class="p-3"><div class="flex gap-2 mb-3"><input id="cq" value="'+esc(S.cq)+'" placeholder="Buscar canto…" class="'+INP+'" autocomplete="off"><button onclick="editarCanto()" class="'+BTN+' bg-indigo-600 hover:bg-indigo-500 shrink-0"><i data-lucide="plus" class="w-4 h-4 inline"></i><span class="hidden sm:inline"> Nuevo</span></button></div>'+
+    '<div class="text-xs text-slate-500 mb-2">'+S.cantos.length+' cantos en la biblioteca</div><div id="cList" class="space-y-0.5">'+listaCantosHtml()+'</div></div>';
+}
+function abrirCanto(id){
+  var c=S.cantos.find(function(x){return x.id===id;}); if(!c) return;
+  S.deck=deckCanto(c); S.tab='slides'; rCentro();
+  if(window.innerWidth<1024) irMob('slides');
+}
+function htmlBiblia(){
+  var h='<div class="p-3"><div class="flex gap-2 mb-2"><input id="bq" value="'+esc(S.bq)+'" placeholder="Ej.: jn 3 16 · sal 23 · 1 co 13 4-7" class="'+INP+'" autocomplete="off" enterkeyhint="search"></div>';
+  if(!BIB) return h+'<p class="text-slate-500 text-center py-6">Cargando Biblia…</p></div>';
+  var r=S.bref;
+  if(!r) return h+'<p class="text-slate-500 text-sm py-4">Escribe una referencia. Abreviaturas: gn, ex, sal, pr, is, mt, mr, lc, jn, hch, ro, 1co, ef, he, stg, ap…</p></div>';
+  var d=deckCap(r.b,r.c);
+  h+='<div class="flex flex-wrap items-center gap-2 mb-3 sticky top-0 bg-slate-950/95 py-2 z-10">'+
+     '<button onclick="capitulo(-1)" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>'+
+     '<div class="font-bold text-lg flex-1 min-w-0 truncate">'+esc(LIBROS[r.b][0]+' '+r.c)+' <span class="text-xs font-normal text-slate-400">RV1909</span></div>'+
+     '<button onclick="capitulo(1)" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>'+
+     '<button onclick="agregarItem({tipo:\'biblia\',ref:'+esc(JSON.stringify(refTxt(r)))+',titulo:'+esc(JSON.stringify(refTxt(r)))+'})" class="'+BTN+' !py-1.5 text-sm bg-indigo-600 hover:bg-indigo-500">Agregar '+esc(r.v1?refTxt(r).split(' ').pop():'capítulo')+'</button></div>';
+  h+='<div class="space-y-1">'+d.slides.map(function(s,i){
+    var enR=r.v1&&s.v>=r.v1&&s.v<=(r.v2||r.v1), live=S.liveDeck&&S.liveDeck.key===d.key&&S.live.pos&&S.live.pos.idx===i;
+    return '<button id="sl-'+i+'" onclick="irSlide(\''+d.key+'\','+i+')" class="w-full text-left flex gap-2 p-2.5 rounded-xl border-2 '+(live?'border-red-500 bg-red-500/10':enR?'border-amber-500/40 bg-amber-500/5':'border-transparent hover:bg-slate-900')+'">'+
+      '<span class="text-xs font-bold text-amber-400 w-7 shrink-0 pt-0.5">'+esc(s.etiqueta.replace('v. ',''))+'</span><span class="text-sm text-slate-200 leading-snug">'+esc(s.texto)+'</span></button>';
+  }).join('')+'</div></div>';
+  return h;
+}
+function buscarBiblia(enter){
+  if(!BIB) return;
+  var r=parseRef(S.bq);
+  if(r){ S.bref=r; rCentro(); var ini=r.v1?slidesBiblia({b:r.b,c:r.c},true).findIndex(function(s){return s.v===r.v1;}):0; var e=$('sl-'+ini); if(e&&r.v1) e.scrollIntoView({block:'center'}); var q=$('bq'); if(q){ q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
+    if(enter&&r.v1) irSlide('bb:'+r.b+':'+r.c, ini); }
+}
+function capitulo(dir){
+  var r=S.bref; if(!r) return; var c=r.c+dir, b=r.b;
+  if(c<1){ if(b===0) return; b--; c=BIB[b].length; } else if(c>BIB[b].length){ if(b===65) return; b++; c=1; }
+  S.bref={b:b,c:c,v1:null,v2:null}; S.bq=LIBROS[b][0]+' '+c; rCentro(); $('cBody').scrollTop=0;
+}
+
+/* ---------- editor de cantos ---------- */
+async function cargarCantos(){
+  try{ S.cantos=await dbGet('proy_cantos','iglesia_id=eq.'+IGLESIA+'&select=id,titulo,autor,tono,letra,updated_at&order=titulo.asc'); }
+  catch(e){ toast(e.message,'err'); }
+  if(S.tab==='cantos') rCentro();
+}
+function editarCanto(id){
+  var c=id?S.cantos.find(function(x){return x.id===id;}):null;
+  modal('mCanto',c?'Editar canto':'Canto nuevo',
+    '<form id="fCanto" class="space-y-3">'+
+     '<div><label class="text-sm text-slate-300">Título</label><input name="titulo" required value="'+esc(c?c.titulo:'')+'" class="'+INP+' mt-1"></div>'+
+     '<div class="grid grid-cols-[1fr_6rem] gap-2"><div><label class="text-sm text-slate-300">Autor</label><input name="autor" value="'+esc(c?c.autor:'')+'" class="'+INP+' mt-1"></div><div><label class="text-sm text-slate-300">Tono</label><input name="tono" value="'+esc(c?c.tono:'')+'" placeholder="G" class="'+INP+' mt-1"></div></div>'+
+     '<div><div class="flex justify-between items-end"><label class="text-sm text-slate-300">Letra</label><span id="cnN" class="text-xs text-slate-500"></span></div>'+
+     '<textarea name="letra" id="cnL" rows="12" class="'+INP+' mt-1 font-mono text-sm leading-relaxed" placeholder="[Estrofa 1]\nPrimera línea\nSegunda línea\n\n[Coro]\nLínea del coro\n\n[Coro]">'+esc(c?c.letra:'')+'</textarea>'+
+     '<p class="text-xs text-slate-500 mt-1">Separa estrofas con una <b>línea en blanco</b>. Etiqueta opcional en su propia línea: <code>[Coro]</code>. Escribir <code>[Coro]</code> solo, sin letra, repite el coro.</p></div>'+
+     '<div class="flex gap-2">'+(c?'<button type="button" onclick="borrarCanto(\''+c.id+'\')" class="'+BTN+' bg-red-600/20 text-red-300 hover:bg-red-600/30"><i data-lucide="trash-2" class="w-4 h-4"></i></button>':'')+
+     '<button class="'+BTN+' flex-1 bg-indigo-600 hover:bg-indigo-500">Guardar</button></div></form>','sm:max-w-2xl');
+  function cuenta(){ $('cnN').textContent=slidesLetra($('cnL').value,S.tema.lineas).length+' diapositivas'; }
+  $('cnL').oninput=cuenta; cuenta();
+  $('fCanto').onsubmit=async function(e){
+    e.preventDefault(); var fd=new FormData(e.target);
+    var o={titulo:fd.get('titulo').trim(),autor:fd.get('autor').trim()||null,tono:fd.get('tono').trim()||null,letra:fd.get('letra'),updated_at:new Date().toISOString()};
+    try{
+      var r;
+      if(c) r=await dbPatch('proy_cantos','id=eq.'+c.id,o);
+      else { o.iglesia_id=IGLESIA; r=await dbPost('proy_cantos',o); }
+      cerrarModal('mCanto'); await cargarCantos(); busSend('cantos',{});
+      if(S.culto) await cargarItems();
+      if(r&&r[0]) abrirCanto(r[0].id);
+      toast('Canto guardado');
+    }catch(x){ toast(x.message,'err'); }
+  };
+}
+async function borrarCanto(id){
+  var c=S.cantos.find(function(x){return x.id===id;}); if(!c) return;
+  if(!confirm('¿Eliminar "'+c.titulo+'" de la biblioteca? Si está en algún culto, quedará como "Canto eliminado".')) return;
+  try{ await dbDel('proy_cantos','id=eq.'+id); cerrarModal('mCanto'); if(S.deck&&S.deck.key==='ct:'+id) S.deck=null; await cargarCantos(); busSend('cantos',{}); if(S.culto) cargarItems(); rCentro(); }
+  catch(e){ toast(e.message,'err'); }
+}
+
+/* =====================================================================
+   EN VIVO · lo que sale en pantalla
+   ===================================================================== */
+function emitir(){ guardarLive(); busSend('estado',{e:S.live,t:S.tema}); rVivo(); rMobBar(); }
+function irSlide(key,i){
+  var d=deckPorKey(key)||(S.deck&&S.deck.key===key?S.deck:null); if(!d||!d.slides[i]) return;
+  S.liveDeck=d;
+  S.live.slide=d.slides[i]; S.live.next=d.slides[i+1]||siguienteItemPrimera(d)||null;
+  S.live.pos={key:d.key,idx:i}; S.live.oculto=false;
+  emitir(); marcarVivo();
+}
+function siguienteItemPrimera(d){
+  if(!d.item) return null; var i=S.items.findIndex(function(x){return x.id===d.item.id;});
+  for(var j=i+1;j<S.items.length;j++){ var nd=deckItem(S.items[j]); if(nd.slides.length) return nd.slides[0]; }
+  return null;
+}
+function marcarVivo(){
+  rCulto();
+  if(S.tab==='slides'||S.tab==='biblia'){ rCentro(); var p=S.live.pos, viendo=(S.tab==='slides'&&S.deck&&p&&S.deck.key===p.key)||(S.tab==='biblia'&&p&&p.key.indexOf('bb:')===0); if(viendo){ var e=$('sl-'+p.idx); if(e) e.scrollIntoView({block:'nearest',behavior:'smooth'}); } }
+}
+function avanzar(dir){
+  var d=S.liveDeck, p=S.live.pos;
+  if(!d||!p){ if(S.deck&&S.deck.slides.length) irSlide(S.deck.key, dir>0?0:S.deck.slides.length-1); return; }
+  var ni=p.idx+dir;
+  if(ni>=0 && ni<d.slides.length) return irSlide(d.key,ni);
+  if(d.item){
+    var i=S.items.findIndex(function(x){return x.id===d.item.id;});
+    for(var j=i+dir;j>=0&&j<S.items.length;j+=dir){
+      var nd=deckItem(S.items[j]);
+      if(nd.slides.length){ S.deck=nd; irSlide(nd.key, dir>0?0:nd.slides.length-1); if(S.tab==='slides') rCentro(); return; }
+    }
+  }
+}
+function capa(c){
+  if(c==='negro') S.live.negro=!S.live.negro;
+  else if(c==='logo') S.live.logo=!S.live.logo;
+  else if(c==='oculto') S.live.oculto=!S.live.oculto;
+  else if(c==='limpiar'){ S.live.negro=false; S.live.logo=false; S.live.oculto=false; S.live.slide=null; S.live.next=null; S.live.pos=null; S.live.msg=''; S.live.cuenta=null; S.liveDeck=null; marcarVivo(); }
+  emitir();
+}
+function enviarMsg(){ var v=($('msgIn')||{}).value; if(!v||!v.trim()) return; S.live.msg=v.trim(); emitir(); }
+function quitarMsg(){ S.live.msg=''; emitir(); }
+function iniciarCuenta(){ var m=+($('cuMin')||{}).value||5; S.live.cuenta={fin:Date.now()+m*60000, texto:($('cuTx')||{}).value||'Comenzamos en'}; emitir(); }
+function detenerCuenta(){ S.live.cuenta=null; emitir(); }
+var MSGS=['Padres del niño(a) ____, favor pasar a la entrada','Favor apagar o silenciar sus celulares','Hay un vehículo mal estacionado: placa ____'];
+function rVivo(){
+  var el=$('pVivo'); if(!el) return;
+  var L=S.live, slide=L.slide;
+  var foco=document.activeElement&&document.activeElement.id; var msgVal=$('msgIn')?$('msgIn').value:'';
+  var b=function(c,ic,t,on,col){ return '<button onclick="capa(\''+c+'\')" class="py-3 rounded-xl font-semibold text-sm flex flex-col items-center gap-1 border-2 '+(on?col:'border-slate-700 bg-slate-800 hover:bg-slate-700')+'"><i data-lucide="'+ic+'" class="w-5 h-5"></i>'+t+'</button>'; };
+  el.innerHTML='<div class="p-3 space-y-3">'+
+    '<div><div class="flex items-center justify-between mb-1.5"><span class="text-xs font-bold uppercase tracking-wide text-red-400">● En vivo</span><span class="text-xs text-slate-500 truncate ml-2">'+(slide?esc((S.liveDeck?S.liveDeck.titulo+' · ':'')+(slide.etiqueta||'')):'Nada en pantalla')+'</span></div>'+
+     '<div id="miniStage" class="prev169 ring-1 ring-slate-700"></div>'+
+     (L.negro||L.logo||L.oculto?'<div class="flex gap-1 mt-1.5 text-[11px] font-bold">'+(L.negro?'<span class="px-2 py-0.5 rounded bg-black border border-slate-500">NEGRO</span>':'')+(L.logo?'<span class="px-2 py-0.5 rounded bg-indigo-600">LOGO</span>':'')+(L.oculto?'<span class="px-2 py-0.5 rounded bg-slate-600">TEXTO OCULTO</span>':'')+'</div>':'')+
+    '</div>'+
+    '<div class="grid grid-cols-2 gap-2"><button onclick="avanzar(-1)" class="py-4 rounded-xl bg-slate-800 hover:bg-slate-700 font-bold flex items-center justify-center gap-1"><i data-lucide="chevron-left" class="w-6 h-6"></i>Anterior</button>'+
+     '<button onclick="avanzar(1)" class="py-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold flex items-center justify-center gap-1">Siguiente<i data-lucide="chevron-right" class="w-6 h-6"></i></button></div>'+
+    (L.next?'<div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800"><div class="text-[11px] uppercase font-semibold text-slate-500 mb-0.5">Siguiente · '+esc(L.next.etiqueta||'')+'</div><div class="text-sm text-slate-300 ptxt">'+esc(L.next.texto)+'</div></div>':'')+
+    '<div class="grid grid-cols-4 gap-2">'+b('negro','square','Negro',L.negro,'border-white bg-black')+b('logo','image','Logo',L.logo,'border-indigo-400 bg-indigo-600')+b('oculto','eye-off','Ocultar',L.oculto,'border-slate-300 bg-slate-600')+
+     '<button onclick="capa(\'limpiar\')" class="py-3 rounded-xl font-semibold text-sm flex flex-col items-center gap-1 border-2 border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20"><i data-lucide="eraser" class="w-5 h-5"></i>Limpiar</button></div>'+
+    '<div class="p-3 rounded-xl bg-slate-900 border border-slate-800"><div class="text-sm font-semibold mb-2 flex items-center gap-1.5"><i data-lucide="message-square-warning" class="w-4 h-4 text-red-400"></i>Mensaje en pantalla</div>'+
+     '<input id="msgIn" list="msgList" value="'+esc(msgVal||L.msg||'')+'" placeholder="Escribe un aviso…" class="'+INP+' !py-2 text-sm"><datalist id="msgList">'+MSGS.map(function(m){return '<option value="'+esc(m)+'">';}).join('')+'</datalist>'+
+     '<div class="grid grid-cols-2 gap-2 mt-2"><button onclick="enviarMsg()" class="'+BTN+' !py-2 text-sm bg-red-600 hover:bg-red-500">Mostrar</button><button onclick="quitarMsg()" class="'+BTN+' !py-2 text-sm bg-slate-800 hover:bg-slate-700'+(L.msg?'':' opacity-50')+'">Quitar</button></div></div>'+
+    '<div class="p-3 rounded-xl bg-slate-900 border border-slate-800"><div class="text-sm font-semibold mb-2 flex items-center gap-1.5"><i data-lucide="timer" class="w-4 h-4 text-amber-400"></i>Cuenta regresiva '+(L.cuenta?'<span class="ml-auto text-amber-300 tabular-nums" id="cuVivo">'+mmss(L.cuenta.fin-Date.now())+'</span>':'')+'</div>'+
+     '<div class="grid grid-cols-[5rem_1fr] gap-2"><select id="cuMin" class="'+INP+' !py-2 text-sm">'+[1,2,3,5,10,15,20,30].map(function(m){return '<option value="'+m+'"'+(m===5?' selected':'')+'>'+m+' min</option>';}).join('')+'</select><input id="cuTx" value="Comenzamos en" class="'+INP+' !py-2 text-sm"></div>'+
+     '<div class="grid grid-cols-2 gap-2 mt-2"><button onclick="iniciarCuenta()" class="'+BTN+' !py-2 text-sm bg-amber-600 hover:bg-amber-500">Iniciar</button><button onclick="detenerCuenta()" class="'+BTN+' !py-2 text-sm bg-slate-800 hover:bg-slate-700'+(L.cuenta?'':' opacity-50')+'">Detener</button></div></div>'+
+  '</div>';
+  ri();
+  renderStage($('miniStage'),L,S.tema);
+  if(foco==='msgIn'){ var mi=$('msgIn'); mi.focus(); mi.setSelectionRange(mi.value.length,mi.value.length); }
+}
+setInterval(function(){ var c=$('cuVivo'); if(c&&S.live.cuenta) c.textContent=mmss(S.live.cuenta.fin-Date.now()); },500);
+function rMobBar(){
+  var el=$('mobBar'); if(!el) return; var L=S.live;
+  var bt=function(c,ic,on,col){ return '<button onclick="capa(\''+c+'\')" class="p-2.5 rounded-xl border '+(on?col:'border-slate-700 bg-slate-800')+'"><i data-lucide="'+ic+'" class="w-5 h-5"></i></button>'; };
+  el.innerHTML='<div class="flex items-center gap-1.5 px-2 py-1.5">'+
+    '<button onclick="avanzar(-1)" class="p-2.5 rounded-xl bg-slate-800"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>'+
+    '<div class="flex-1 min-w-0 text-center leading-tight" onclick="irMob(\'vivo\')"><div class="text-[10px] font-bold text-red-400">● EN VIVO</div><div class="text-xs truncate text-slate-300">'+(L.slide?esc((L.slide.texto||'').split('\n')[0]):'—')+'</div></div>'+
+    bt('negro','square',L.negro,'border-white bg-black')+bt('logo','image',L.logo,'border-indigo-400 bg-indigo-600')+bt('oculto','eye-off',L.oculto,'border-slate-300 bg-slate-600')+
+    '<button onclick="avanzar(1)" class="p-2.5 rounded-xl bg-indigo-600"><i data-lucide="chevron-right" class="w-5 h-5"></i></button></div>';
+  ri();
+}
+function teclas(e){
+  var t=e.target&&e.target.tagName; if(t==='INPUT'||t==='TEXTAREA'||t==='SELECT') return;
+  if(document.querySelector('[id^="m"].fixed')) { if(e.key==='Escape'){ var ms=document.querySelectorAll('.fixed.inset-0.z-\\[70\\]'); if(ms.length) ms[ms.length-1].remove(); } return; }
+  var k=e.key;
+  if(k==='ArrowRight'||k===' '||k==='PageDown'){ e.preventDefault(); avanzar(1); }
+  else if(k==='ArrowLeft'||k==='PageUp'){ e.preventDefault(); avanzar(-1); }
+  else if(k==='b'||k==='B'||k==='.') capa('negro');
+  else if(k==='l'||k==='L') capa('logo');
+  else if(k==='h'||k==='H') capa('oculto');
+  else if(k==='Escape') capa('limpiar');
+}
+window.addEventListener('resize',debounce(function(){ if($('miniStage')) renderStage($('miniStage'),S.live,S.tema); },150));
+
+/* =====================================================================
+   TEMA VISUAL
+   ===================================================================== */
+function modalTema(){
+  var t=temaFull(S.tema), tmp=JSON.parse(JSON.stringify(t));
+  var sw=Object.keys(PRESETS).map(function(k){ return '<button type="button" data-f="'+k+'" class="tF h-12 rounded-xl border-2 '+(t.fondo===k?'border-white':'border-transparent')+'" style="background:'+PRESETS[k]+'" title="'+k+'"></button>'; }).join('')+
+    '<label class="tF h-12 rounded-xl border-2 '+(t.fondo==='color'?'border-white':'border-slate-700')+' flex items-center justify-center cursor-pointer relative" data-f="color" style="background:'+t.fondoColor+'"><i data-lucide="pipette" class="w-4 h-4"></i><input type="color" id="tFC" value="'+t.fondoColor+'" class="absolute inset-0 opacity-0 cursor-pointer"></label>';
+  modal('mTema','Tema visual',
+    '<div class="prev169 mb-4 ring-1 ring-slate-700" id="tPrev"></div>'+
+    '<div class="space-y-4">'+
+     '<div><div class="text-sm font-semibold mb-2">Fondo</div><div class="grid grid-cols-7 gap-2">'+sw+'</div></div>'+
+     '<div><div class="text-sm font-semibold mb-2">Imagen de fondo <span class="font-normal text-slate-500">(opcional)</span></div>'+
+      '<div class="flex gap-2"><input id="tFI" value="'+esc(t.fondoImg)+'" placeholder="Pega un enlace o sube una imagen" class="'+INP+' !py-2 text-sm"><label class="'+BTN+' !px-3 bg-slate-800 hover:bg-slate-700 cursor-pointer shrink-0"><i data-lucide="upload" class="w-4 h-4"></i><input type="file" accept="image/*" id="tFU" class="hidden"></label></div>'+
+      '<label class="flex items-center gap-3 mt-2 text-sm text-slate-300">Oscurecer <input type="range" id="tOs" min="0" max="85" value="'+t.oscurecer+'" class="flex-1"></label></div>'+
+     '<div class="grid grid-cols-2 gap-3"><div><div class="text-sm font-semibold mb-2">Letra</div><select id="tFu" class="'+INP+' !py-2 text-sm"><option value="sans">Moderna</option><option value="serif">Clásica</option><option value="cond">Condensada</option></select></div>'+
+      '<div><div class="text-sm font-semibold mb-2">Color de letra</div><input type="color" id="tCo" value="'+t.color+'" class="w-full h-10 rounded-xl bg-slate-950 border border-slate-700"></div></div>'+
+     '<label class="block text-sm"><span class="font-semibold">Tamaño máximo</span><input type="range" id="tTa" min="4" max="14" step="0.5" value="'+t.tam+'" class="w-full"></label>'+
+     '<div class="grid grid-cols-2 gap-3"><label class="block text-sm"><span class="font-semibold">Líneas por diapositiva</span><select id="tLi" class="'+INP+' !py-2 text-sm mt-1">'+[2,3,4,5,6,8].map(function(n){return '<option'+(n===t.lineas?' selected':'')+'>'+n+'</option>';}).join('')+'</select></label>'+
+      '<label class="block text-sm"><span class="font-semibold">Alineación</span><select id="tAl" class="'+INP+' !py-2 text-sm mt-1"><option value="center">Centro</option><option value="left">Izquierda</option></select></label></div>'+
+     '<div class="flex gap-4 text-sm"><label class="flex items-center gap-2"><input type="checkbox" id="tMa"'+(t.mayus?' checked':'')+' class="w-4 h-4 accent-indigo-500">MAYÚSCULAS</label><label class="flex items-center gap-2"><input type="checkbox" id="tSo"'+(t.sombra?' checked':'')+' class="w-4 h-4 accent-indigo-500">Sombra</label></div>'+
+     '<div><div class="text-sm font-semibold mb-2">Logo <span class="font-normal text-slate-500">(botón Logo)</span></div>'+
+      '<div class="flex gap-2"><input id="tLg" value="'+esc(t.logoImg)+'" placeholder="Enlace de imagen (PNG)" class="'+INP+' !py-2 text-sm"><label class="'+BTN+' !px-3 bg-slate-800 hover:bg-slate-700 cursor-pointer shrink-0"><i data-lucide="upload" class="w-4 h-4"></i><input type="file" accept="image/*" id="tLU" class="hidden"></label></div>'+
+      '<input id="tLT" value="'+esc(t.logoTexto)+'" placeholder="Texto si no hay imagen" class="'+INP+' !py-2 text-sm mt-2"></div>'+
+     '<div class="flex gap-2 pt-1"><button type="button" onclick="cerrarModal(\'mTema\')" class="'+BTN+' flex-1 bg-slate-800 hover:bg-slate-700">Cancelar</button><button type="button" id="tOk" class="'+BTN+' flex-1 bg-indigo-600 hover:bg-indigo-500">Guardar y aplicar</button></div>'+
+    '</div>','sm:max-w-xl');
+  $('tFu').value=t.fuente; $('tAl').value=t.alinear;
+  var demo={slide:{texto:'Cuán grande es Él\nCuán grande es Él',etiqueta:'Coro'}};
+  function leer(){
+    tmp.fondoImg=$('tFI').value.trim(); tmp.oscurecer=+$('tOs').value; tmp.fuente=$('tFu').value; tmp.color=$('tCo').value;
+    tmp.tam=+$('tTa').value; tmp.lineas=+$('tLi').value; tmp.alinear=$('tAl').value; tmp.mayus=$('tMa').checked; tmp.sombra=$('tSo').checked;
+    tmp.logoImg=$('tLg').value.trim(); tmp.logoTexto=$('tLT').value; tmp.fondoColor=$('tFC').value;
+    renderStage($('tPrev'),demo,tmp);
+  }
+  document.querySelectorAll('#mTema .tF').forEach(function(x){ x.addEventListener('click',function(){ tmp.fondo=x.getAttribute('data-f'); document.querySelectorAll('#mTema .tF').forEach(function(y){ y.classList.toggle('border-white',y===x); y.classList.toggle('border-transparent',y!==x&&y.tagName==='BUTTON'); }); leer(); }); });
+  $('tFC').addEventListener('input',function(){ tmp.fondo='color'; this.parentNode.style.background=this.value; leer(); });
+  ['tFI','tOs','tFu','tCo','tTa','tLi','tAl','tMa','tSo','tLg','tLT'].forEach(function(id){ $(id).addEventListener('input',leer); $(id).addEventListener('change',leer); });
+  $('tFU').onchange=function(){ subirImagen(this.files[0],'fondo').then(function(u){ if(u){ $('tFI').value=u; leer(); } }); };
+  $('tLU').onchange=function(){ subirImagen(this.files[0],'logo').then(function(u){ if(u){ $('tLg').value=u; leer(); } }); };
+  $('tOk').onclick=async function(){
+    leer();
+    try{
+      await dbUpsert('proy_config',{iglesia_id:IGLESIA,tema:tmp,updated_at:new Date().toISOString()},'iglesia_id');
+      var cambioLineas=tmp.lineas!==S.tema.lineas;
+      S.tema=temaFull(tmp); cerrarModal('mTema'); emitir(); busSend('tema',{t:S.tema});
+      if(cambioLineas) reconstruirDecks();
+      toast('Tema aplicado');
+    }catch(e){ toast(e.message,'err'); }
+  };
+  setTimeout(leer,30);
+}
+function comprimir(file,max,tipo){
+  return new Promise(function(ok,ko){
+    var img=new Image(), url=URL.createObjectURL(file);
+    img.onload=function(){
+      var k=Math.min(1,max/Math.max(img.width,img.height)), c=document.createElement('canvas');
+      c.width=Math.round(img.width*k); c.height=Math.round(img.height*k);
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url);
+      c.toBlob(function(b){ b?ok(b):ko(new Error('No se pudo procesar la imagen')); },tipo,0.85);
+    };
+    img.onerror=function(){ ko(new Error('Imagen no válida')); };
+    img.src=url;
+  });
+}
+async function subirImagen(file,clase){
+  if(!file) return null;
+  try{
+    toast('Subiendo imagen…');
+    var png=clase==='logo'&&/png|svg|webp/.test(file.type);
+    var blob=await comprimir(file,clase==='logo'?1000:1920,png?'image/png':'image/jpeg');
+    var path=IGLESIA+'/'+clase+'-'+Date.now()+(png?'.png':'.jpg');
+    await asegurarSesion();
+    var r=await req('/storage/v1/object/proy-medios/'+path,{method:'POST',headers:{'Content-Type':png?'image/png':'image/jpeg','x-upsert':'true'},body:blob},60000);
+    if(!r.ok) throw new Error(errTxt(await r.text()));
+    toast('Imagen lista');
+    return URL_BASE+'/storage/v1/object/public/proy-medios/'+path;
+  }catch(e){ toast(e.message,'err'); return null; }
+}
+
+/* =====================================================================
+   ARRANQUE
+   ===================================================================== */
+async function arrancar(){
+  var h=hashParams();
+  if(h.vista==='pantalla') return vistaPantalla(h.p);
+  if(h.vista==='escenario') return vistaEscenario(h.p);
+  await Promise.all([
+    loadScript('https://cdn.tailwindcss.com'),
+    loadScript('https://unpkg.com/lucide@latest/dist/umd/lucide.min.js').catch(function(){})
+  ]).catch(function(){});
+  var s=loadSession();
+  if(!s) return vistaLogin();
+  S.session=s; S.user=s.user;
+  if(expirada(s)){ var f=await refrescar(s.refresh_token); if(!f){ clearSession(); return vistaLogin(); } }
+  iniciarControl();
+}
+window.addEventListener('hashchange',function(){ location.reload(); });
+if('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(function(){});
+arrancar();
+</script>
+</body>
+</html>

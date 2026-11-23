@@ -1,0 +1,13 @@
+{
+  "name": "Proyección",
+  "short_name": "Proyección",
+  "description": "Proyección de cantos, Biblia y avisos para la iglesia",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#0f172a",
+  "lang": "es",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
