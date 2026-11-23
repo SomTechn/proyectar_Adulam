@@ -19,6 +19,7 @@ as $$
       and rol in ('admin','pastor','lider','servidor')
   );
 $$;
+revoke execute on function public.proy_puede() from public, anon;
 grant execute on function public.proy_puede() to authenticated;
 
 -- 2) Configuración por iglesia (código de sala y tema visual)
@@ -98,6 +99,10 @@ on conflict (iglesia_id) do nothing;
 insert into storage.buckets (id, name, public)
 values ('proy-medios', 'proy-medios', true)
 on conflict (id) do nothing;
+
+drop policy if exists proy_medios_select on storage.objects;
+create policy proy_medios_select on storage.objects
+  for select to authenticated using (bucket_id = 'proy-medios' and public.proy_puede());
 
 drop policy if exists proy_medios_insert on storage.objects;
 create policy proy_medios_insert on storage.objects
